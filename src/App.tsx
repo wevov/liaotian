@@ -5,66 +5,151 @@ import { Feed } from './components/Feed';
 import { Messages } from './components/Messages';
 import { Profile } from './components/Profile';
 import { Home, MessageSquare, User, LogOut } from 'lucide-react';
-import { Profile as ProfileType } from './lib/supabase';
+import { supabase } from './lib/supabase';
 
 const Main = () => {
   const [view, setView] = useState<'feed' | 'messages' | 'profile'>('feed');
   const [selectedProfileId, setSelectedProfileId] = useState<string | undefined>();
   const { user, profile, loading, signOut } = useAuth();
 
-  // Listen for profile navigation from anywhere
+  // === URL PROFILE LOOKUP — WORKS EVEN WHEN NOT LOGGED IN ===
+  useEffect(() => {
+    const checkUrlForProfile = async () => {
+      // Get the raw search string: ?cpbk → "cpbk"
+      const search = window.location.search; // "?cpbk"
+      const username = search.startsWith('?') ? search.slice(1) : search;
+
+      if (!username || username.length < 1) {
+        setView('feed');
+        setSelectedProfileId(undefined);
+        return;
+      }
+
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', username.toLowerCase())
+          .single();
+
+        if (data) {
+          setSelectedProfileId(data.id);
+          setView('profile');
+          // Optional: clean URL after loading
+          // window.history.replaceState({}, '', window.location.pathname);
+        } else {
+          setView('feed');
+          setSelectedProfileId(undefined);
+        }
+      } catch (err) {
+        setView('feed');
+        setSelectedProfileId(undefined);
+      }
+    };
+
+    checkUrlForProfile();
+    window.addEventListener('popstate', checkUrlForProfile);
+    return () => window.removeEventListener('popstate', checkUrlForProfile);
+  }, []);
+
+  // Keep internal navigation working
   useEffect(() => {
     const handler = (e: any) => {
-      setSelectedProfileId(e.detail);
-      setView('profile');
+      const profileId = e.detail;
+      supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', profileId)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            window.history.replaceState({}, '', `/?${data.username}`);
+            setSelectedProfileId(profileId);
+            setView('profile');
+          }
+        });
     };
     window.addEventListener('navigateToProfile', handler);
     return () => window.removeEventListener('navigateToProfile', handler);
   }, []);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  if (!user || !profile) return <Auth />;
+  if (loading) return <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center text-2xl font-bold">Loading...</div>;
 
-  const handleMessageUser = (userProfile: ProfileType) => {
+  // === NOT LOGGED IN? SHOW AUTH OR PUBLIC PROFILE ===
+  if (!user || !profile) {
+    // Allow public profile viewing
+    if (view === 'profile' && selectedProfileId) {
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+            <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
+              <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent">
+                聊天
+              </h1>
+              <a href="/" className="text-orange-600 hover:text-orange-700 font-bold">← Back to Home</a>
+            </div>
+          </div>
+          <Profile userId={selectedProfileId} />
+        </div>
+      );
+    }
+
+    return <Auth />;
+  }
+
+  const handleMessageUser = () => {
     setView('messages');
-    // Optionally auto-select user in Messages — advanced, not needed now
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-          <h1 className="text-xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent mb-3">聊天</h1>
-          <div className="flex items-center gap-1">
+          <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent">
+            聊天
+          </h1>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => { setView('feed'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'feed' ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
+              onClick={() => {
+                setView('feed');
+                setSelectedProfileId(undefined);
+                window.history.replaceState({}, '', '/');
+              }}
+              className={`p-3 rounded-full transition ${view === 'feed' ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
             >
-              <Home size={22} className={view === 'feed' ? 'text-orange-500' : ''} />
+              <Home size={24} />
             </button>
             <button
               onClick={() => { setView('messages'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'messages' ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full transition ${view === 'messages' ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
             >
-              <MessageSquare size={22} className={view === 'messages' ? 'text-orange-500' : ''} />
+              <MessageSquare size={24} />
             </button>
             <button
-              onClick={() => { setView('profile'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'profile' && !selectedProfileId ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
-            >
-              <User size={22} className={(view === 'profile' && !selectedProfileId) ? 'text-orange-500' : ''} />
-            </button>
-            <button onClick={signOut} className="p-3 rounded-full hover:bg-gray-100 text-red-500">
-              <LogOut size={22} />
+  onClick={() => {
+    if (!profile?.username) return;
+    
+    window.history.replaceState({}, '', `/?${profile.username}`);
+    setSelectedProfileId(undefined);
+    setView('profile');
+  }}
+  className={`p-3 rounded-full transition ${view === 'profile' && !selectedProfileId ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
+>
+  <User size={24} />
+</button>
+            <button onClick={signOut} className="p-3 rounded-full hover:bg-red-50 text-red-600 transition">
+              <LogOut size={24} />
             </button>
           </div>
         </div>
       </nav>
-      <main>
+
+      <main className="pb-20">
         {view === 'feed' && <Feed />}
         {view === 'messages' && <Messages />}
         {view === 'profile' && <Profile userId={selectedProfileId} onMessage={handleMessageUser} />}
       </main>
+
       <footer className="text-center text-gray-400 text-xs py-4 border-t border-gray-200 bg-white">
         © Mux 2025
       </footer>

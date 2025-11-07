@@ -63,9 +63,19 @@ export const Feed = () => {
     }
   };
 
-  const goToProfile = (profileId: string) => {
-    window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
-  };
+  const goToProfile = async (profileId: string) => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', profileId)
+    .single();
+
+  if (data) {
+    window.history.replaceState({}, '', `/?${data.username}`);
+  }
+
+  window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
+};
 
   return (
     <div className="max-w-2xl mx-auto">

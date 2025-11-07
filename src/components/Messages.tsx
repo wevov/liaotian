@@ -13,9 +13,19 @@ export const Messages = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuth();
 
-  const goToProfile = (profileId: string) => {
-    window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
-  };
+  const goToProfile = async (profileId: string) => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', profileId)
+    .single();
+
+  if (data) {
+    window.history.replaceState({}, '', `/?${data.username}`);
+  }
+
+  window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
+};
 
   useEffect(() => {
     loadConversations();
@@ -129,7 +139,7 @@ export const Messages = () => {
               onClick={() => { setSelectedUser(profile); setSearchQuery(''); }}
               className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-100 ${selectedUser?.id === profile.id ? 'bg-orange-50' : ''}`}
             >
-              <button onClick={(e) => { e.stopPropagation(); goToProfile(profile.id); }}>
+              <button>
                 <img
                   src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`}
                   className="w-12 h-12 rounded-full hover:opacity-80 transition"
@@ -138,8 +148,7 @@ export const Messages = () => {
               </button>
               <div className="flex-1 text-left">
                 <div className="flex items-center gap-1">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); goToProfile(profile.id); }}
+                  <button
                     className="font-semibold text-sm hover:underline"
                   >
                     {profile.display_name}
