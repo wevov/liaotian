@@ -13,7 +13,6 @@ export const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { signUp, signIn } = useAuth();
 
-  // Clear error when user starts typing
   useEffect(() => {
     setError('');
   }, [email, password, username, displayName]);
@@ -26,22 +25,9 @@ export const Auth = () => {
 
     try {
       if (isSignUp) {
-        // Basic validation
-        if (!username.trim()) {
-          setError('Username is required');
-          setIsLoading(false);
-          return;
-        }
-        if (!displayName.trim()) {
-          setError('Display name is required');
-          setIsLoading(false);
-          return;
-        }
-        if (username.includes(' ')) {
-          setError('Username cannot contain spaces');
-          setIsLoading(false);
-          return;
-        }
+        if (!username.trim()) { setError('Username is required'); setIsLoading(false); return; }
+        if (!displayName.trim()) { setError('Display name is required'); setIsLoading(false); return; }
+        if (username.includes(' ')) { setError('Username cannot contain spaces'); setIsLoading(false); return; }
 
         await signUp(email, password, username, displayName);
         setSuccess(true);
@@ -57,9 +43,7 @@ export const Auth = () => {
         await signIn(email, password);
       }
     } catch (err: any) {
-      // Supabase + custom error mapping
       const message = err.message?.toLowerCase() || '';
-
       if (message.includes('invalid login credentials') || message.includes('invalid credentials')) {
         setError('Wrong email or password. Please try again.');
       } else if (message.includes('email not confirmed')) {
@@ -83,19 +67,121 @@ export const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4"
-     style={{
-       background: 'radial-gradient(ellipse at top, #ff9a9e 0%, #fad0c4 40%, #fad0c4 60%, #ff6b6b 100%)',
-       backgroundAttachment: 'fixed'
-     }}>
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">聊天</h1>
-            <p className="text-gray-600 text-lg">LiaoTian</p>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* ANIMATED WAVE BACKGROUND */}
+      <div className="absolute inset-0 -z-10">
+        <svg
+          className="w-full h-full"
+          viewBox="0 0 1440 1024"
+          preserveAspectRatio="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ff6b6b" />
+              <stop offset="50%" stopColor="#ffa726" />
+              <stop offset="100%" stopColor="#ff8a65" />
+            </linearGradient>
+            <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ff5252" />
+              <stop offset="50%" stopColor="#ff9800" />
+              <stop offset="100%" stopColor="#ff6b6b" />
+            </linearGradient>
+            <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#ff3d00" />
+              <stop offset="50%" stopColor="#ff6d00" />
+              <stop offset="100%" stopColor="#ff9100" />
+            </linearGradient>
+          </defs>
+
+          {/* Wave 1 */}
+          <path
+            fill="url(#grad1)"
+            fillOpacity="0.6"
+            d="M0,160 C320,300 1120,50 1440,160 L1440,1024 L0,1024 Z"
+            className="animate-wave1"
+          >
+            <animate
+              attributeName="d"
+              values="
+                M0,160 C320,300 1120,50 1440,160 L1440,1024 L0,1024 Z;
+                M0,200 C380,50 1060,350 1440,180 L1440,1024 L0,1024 Z;
+                M0,160 C320,300 1120,50 1440,160 L1440,1024 L0,1024 Z
+              "
+              dur="20s"
+              repeatCount="indefinite"
+            />
+          </path>
+
+          {/* Wave 2 */}
+          <path
+            fill="url(#grad2)"
+            fillOpacity="0.5"
+            d="M0,300 C280,100 1160,400 1440,280 L1440,1024 L0,1024 Z"
+            className="animate-wave2"
+          >
+            <animate
+              attributeName="d"
+              values="
+                M0,300 C280,100 1160,400 1440,280 L1440,1024 L0,1024 Z;
+                M0,250 C350,450 1090,-50 1440,320 L1440,1024 L0,1024 Z;
+                M0,300 C280,100 1160,400 1440,280 L1440,1024 L0,1024 Z
+              "
+              dur="25s"
+              repeatCount="indefinite"
+            />
+          </path>
+
+          {/* Wave 3 */}
+          <path
+            fill="url(#grad3)"
+            fillOpacity="0.4"
+            d="M0,450 C300,600 1140,200 1440,400 L1440,1024 L0,1024 Z"
+            className="animate-wave3"
+          >
+            <animate
+              attributeName="d"
+              values="
+                M0,450 C300,600 1140,200 1440,400 L1440,1024 L0,1024 Z;
+                M0,500 C250,200 1190,700 1440,350 L1440,1024 L0,1024 Z;
+                M0,450 C300,600 1140,200 1440,400 L1440,1024 L0,1024 Z
+              "
+              dur="30s"
+              repeatCount="indefinite"
+            />
+          </path>
+        </svg>
+
+        <style jsx>{`
+          @keyframes wave1 {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-40px); }
+          }
+          @keyframes wave2 {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(60px); }
+          }
+          @keyframes wave3 {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-80px); }
+          }
+          .animate-wave1 { animation: wave1 20s ease-in-out infinite; }
+          .animate-wave2 { animation: wave2 25s ease-in-out infinite; }
+          .animate-wave3 { animation: wave3 30s ease-in-out infinite; }
+        `}</style>
+      </div>
+
+      {/* AUTH CARD */}
+      <div className="w-full max-w-md z-10">
+        <div className="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border border-white/40">
+          <div className="text-center mb-10">
+            <h1 className="text-6xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent mb-3">
+              聊天
+            </h1>
+            <p className="text-gray-700 text-xl font-bold">LiaoTian</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {isSignUp && (
               <>
                 <input
@@ -105,7 +191,7 @@ export const Auth = () => {
                   onChange={(e) => setUsername(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
+                  className="w-full px-6 py-4 bg-white/80 border-2 border-orange-200 rounded-2xl focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition text-gray-800 placeholder-gray-500 font-medium"
                 />
                 <input
                   type="text"
@@ -114,7 +200,7 @@ export const Auth = () => {
                   onChange={(e) => setDisplayName(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
+                  className="w-full px-6 py-4 bg-white/80 border-2 border-orange-200 rounded-2xl focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition text-gray-800 placeholder-gray-500 font-medium"
                 />
               </>
             )}
@@ -126,7 +212,7 @@ export const Auth = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               disabled={isLoading}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
+              className="w-full px-6 py-4 bg-white/80 border-2 border-orange-200 rounded-2xl focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition text-gray-800 placeholder-gray-500 font-medium"
             />
 
             <input
@@ -136,23 +222,22 @@ export const Auth = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               disabled={isLoading}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition"
+              className="w-full px-6 py-4 bg-white/80 border-2 border-orange-200 rounded-2xl focus:outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100 transition text-gray-800 placeholder-gray-500 font-medium"
             />
 
-            {/* Error & Success Messages */}
-            <div className="min-h-6">
+            <div className="min-h-8">
               {error && (
-                <div className="flex items-center gap-2 text-red-600 bg-red-50 px-4 py-3 rounded-lg border border-red-200">
-                  <AlertCircle size={18} />
-                  <span className="text-sm font-medium">{error}</span>
+                <div className="flex items-center gap-3 text-red-600 bg-red-50/90 px-5 py-4 rounded-2xl border-2 border-red-300 backdrop-blur">
+                  <AlertCircle size={22} />
+                  <span className="font-semibold">{error}</span>
                 </div>
               )}
               {success && (
-                <div className="flex items-center gap-2 text-green-600 bg-green-50 px-4 py-3 rounded-lg border border-green-200">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <div className="flex items-center gap-3 text-green-600 bg-green-50/90 px-5 py-4 rounded-2xl border-2 border-green-300 backdrop-blur">
+                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
-                  <span className="text-sm font-medium">Account created! Switching to Sign In...</span>
+                  <span className="font-bold">Account created! Switching to Sign In...</span>
                 </div>
               )}
             </div>
@@ -160,21 +245,21 @@ export const Auth = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3.5 rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:opacity-70 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-red-600 to-orange-600 text-white py-5 rounded-2xl font-bold text-xl hover:from-red-700 hover:to-orange-700 focus:outline-none focus:ring-4 focus:ring-red-300 disabled:opacity-70 disabled:cursor-not-allowed transition transform hover:scale-[1.02] active:scale-100 shadow-2xl flex items-center justify-center gap-4"
             >
               {isLoading ? (
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <svg className="animate-spin h-7 w-7" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               ) : (
-                <LogIn size={20} />
+                <LogIn size={28} />
               )}
-              {isLoading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
+              {isLoading ? 'Loading...' : (isSignUp ? 'Join LiaoTian' : 'Enter LiaoTian')}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-center">
             <button
               onClick={() => {
                 setIsSignUp(!isSignUp);
@@ -182,14 +267,14 @@ export const Auth = () => {
                 setSuccess(false);
               }}
               disabled={isLoading}
-              className="text-blue-600 hover:text-blue-700 font-medium text-sm hover:underline disabled:opacity-50"
+              className="text-red-600 hover:text-red-700 font-bold text-lg hover:underline disabled:opacity-50"
             >
-              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              {isSignUp ? 'Already have an account? Sign In' : "Need an account? Sign Up"}
             </button>
           </div>
 
-          <div className="text-center text-gray-400 text-xs mt-8">
-            © Mux 2025 • Built with love
+          <div className="text-center text-gray-600 text-sm mt-12 font-bold">
+            © Mux 2025
           </div>
         </div>
       </div>

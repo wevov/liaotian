@@ -34,25 +34,25 @@ const Main = () => {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-          <h1 className="text-xl font-bold">聊天</h1>
+          <h1 className="text-xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent mb-3">聊天</h1>
           <div className="flex items-center gap-1">
             <button
               onClick={() => { setView('feed'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'feed' ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full ${view === 'feed' ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
             >
-              <Home size={22} className={view === 'feed' ? 'text-blue-500' : ''} />
+              <Home size={22} className={view === 'feed' ? 'text-orange-500' : ''} />
             </button>
             <button
               onClick={() => { setView('messages'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'messages' ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full ${view === 'messages' ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
             >
-              <MessageSquare size={22} className={view === 'messages' ? 'text-blue-500' : ''} />
+              <MessageSquare size={22} className={view === 'messages' ? 'text-orange-500' : ''} />
             </button>
             <button
               onClick={() => { setView('profile'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full ${view === 'profile' && !selectedProfileId ? 'bg-blue-100' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full ${view === 'profile' && !selectedProfileId ? 'bg-orange-100' : 'hover:bg-gray-100'}`}
             >
-              <User size={22} className={(view === 'profile' && !selectedProfileId) ? 'text-blue-500' : ''} />
+              <User size={22} className={(view === 'profile' && !selectedProfileId) ? 'text-orange-500' : ''} />
             </button>
             <button onClick={signOut} className="p-3 rounded-full hover:bg-gray-100 text-red-500">
               <LogOut size={22} />

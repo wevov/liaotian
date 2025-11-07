@@ -118,7 +118,7 @@ export const Messages = () => {
               placeholder="Search users..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500"
+              className="w-full pl-10 pr-3 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:bg-white focus:ring-1 focus:ring-orange-500"
             />
           </div>
         </div>
@@ -127,7 +127,7 @@ export const Messages = () => {
             <button
               key={profile.id}
               onClick={() => { setSelectedUser(profile); setSearchQuery(''); }}
-              className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-100 ${selectedUser?.id === profile.id ? 'bg-blue-50' : ''}`}
+              className={`w-full p-4 flex items-center gap-3 hover:bg-gray-50 border-b border-gray-100 ${selectedUser?.id === profile.id ? 'bg-orange-50' : ''}`}
             >
               <button onClick={(e) => { e.stopPropagation(); goToProfile(profile.id); }}>
                 <img
@@ -144,7 +144,7 @@ export const Messages = () => {
                   >
                     {profile.display_name}
                   </button>
-                  {profile.verified && <BadgeCheck size={14} className="text-blue-500" />}
+                  {profile.verified && <BadgeCheck size={14} className="text-orange-500" />}
                 </div>
                 <span className="text-gray-500 text-xs">@{profile.username}</span>
               </div>
@@ -172,7 +172,7 @@ export const Messages = () => {
                   >
                     {selectedUser.display_name}
                   </button>
-                  {selectedUser.verified && <BadgeCheck size={16} className="text-blue-500" />}
+                  {selectedUser.verified && <BadgeCheck size={16} className="text-orange-500" />}
                 </div>
                 <span className="text-gray-500 text-sm">@{selectedUser.username}</span>
               </div>
@@ -181,10 +181,10 @@ export const Messages = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {messages.map((msg) => (
                 <div key={msg.id} className={`flex ${msg.sender_id === user!.id ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs px-4 py-2 rounded-2xl ${msg.sender_id === user!.id ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}>
+                  <div className={`max-w-xs px-4 py-2 rounded-2xl ${msg.sender_id === user!.id ? 'bg-orange-500 text-white' : 'bg-gray-200'}`}>
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                     {msg.image_url && <img src={msg.image_url} className="mt-2 rounded-lg max-w-full" alt="Message" />}
-                    <span className={`text-xs ${msg.sender_id === user!.id ? 'text-blue-100' : 'text-gray-500'}`}>
+                    <span className={`text-xs ${msg.sender_id === user!.id ? 'text-orange-100' : 'text-gray-500'}`}>
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -198,18 +198,18 @@ export const Messages = () => {
                   placeholder="Image URL"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-500"
+                  className="px-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
                 />
                 <input
                   type="text"
                   placeholder="Type a message..."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-blue-500"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:border-orange-500"
                 />
                 <button
                   type="submit"
-                  className="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600"
+                  className="bg-orange-500 text-white p-2 rounded-full hover:bg-orange-600"
                 >
                   <Send size={20} />
                 </button>

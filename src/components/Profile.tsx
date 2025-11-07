@@ -96,7 +96,7 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
           {profile.banner_url ? (
             <img src={profile.banner_url} className="w-full h-full object-cover" alt="Banner" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-600" />
+            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-purple-600" />
           )}
         </div>
 
@@ -151,35 +151,35 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Display Name"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-orange-500"
               />
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Bio"
                 rows={3}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-orange-500 resize-none"
               />
               <input
                 type="url"
                 value={avatarUrl}
                 onChange={(e) => setAvatarUrl(e.target.value)}
                 placeholder="Avatar URL"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-orange-500"
               />
               <input
                 type="url"
                 value={bannerUrl}
                 onChange={(e) => setBannerUrl(e.target.value)}
                 placeholder="Banner URL"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-orange-500"
               />
             </div>
           ) : (
             <div className="mt-5">
               <div className="flex items-center gap-2">
                 <h1 className="text-2xl font-bold">{profile.display_name}</h1>
-                {profile.verified && <BadgeCheck size={22} className="text-blue-500" />}
+                {profile.verified && <BadgeCheck size={22} className="text-orange-500" />}
               </div>
               <p className="text-gray-500">@{profile.username}</p>
               {profile.bio && <p className="mt-3 text-gray-800">{profile.bio}</p>}
@@ -211,7 +211,7 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
               <div className="flex-1">
                 <div className="flex items-center gap-1">
                   <span className="font-bold">{profile.display_name}</span>
-                  {profile.verified && <BadgeCheck size={16} className="text-blue-500" />}
+                  {profile.verified && <BadgeCheck size={16} className="text-orange-500" />}
                   <span className="text-gray-500 text-sm">@{profile.username}</span>
                   <span className="text-gray-500 text-sm">· {new Date(post.created_at).toLocaleDateString()}</span>
                 </div>

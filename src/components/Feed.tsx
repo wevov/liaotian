@@ -83,12 +83,12 @@ export const Feed = () => {
             placeholder="Image URL (optional)"
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-500"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-orange-500"
           />
           <button
             type="submit"
             disabled={!content.trim()}
-            className="bg-blue-500 disabled:bg-gray-300 text-white px-6 py-2 rounded-full hover:bg-blue-600 flex items-center gap-2 font-semibold transition"
+            className="bg-orange-500 disabled:bg-gray-300 text-white px-6 py-2 rounded-full hover:bg-orange-600 flex items-center gap-2 font-semibold transition"
           >
             <Send size={16} />
             Post
@@ -115,7 +115,7 @@ export const Feed = () => {
                   >
                     {post.profiles?.display_name}
                   </button>
-                  {post.profiles?.verified && <BadgeCheck size={16} className="text-blue-500" />}
+                  {post.profiles?.verified && <BadgeCheck size={16} className="text-orange-500" />}
                   <span className="text-gray-500 text-sm">@{post.profiles?.username}</span>
                   <span className="text-gray-500 text-sm">· {new Date(post.created_at).toLocaleDateString()}</span>
                 </div>
