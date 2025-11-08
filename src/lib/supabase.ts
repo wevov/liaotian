@@ -44,7 +44,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export const uploadMedia = async (
   file: File,
-  folder: 'posts' | 'messages',
+  folder: 'posts' | 'messages' | 'profiles',
   onProgress?: (percent: number) => void
 ): Promise<{ url: string; type: string } | null> => {
   const user = (await supabase.auth.getUser())?.data.user;
@@ -66,6 +66,11 @@ export const uploadMedia = async (
   else if (validDoc.includes(ext)) type = 'document';
   else {
     alert('Unsupported file type');
+    return null;
+  }
+
+  if (folder === 'profiles' && type !== 'image') {
+    alert('Images only for profiles');
     return null;
   }
 
