@@ -9,10 +9,10 @@ interface ThemePreset {
 }
 
 const presets: ThemePreset[] = [
-  { value: 'lt-classic', name: 'LT Classic', desc: 'Fiery orange and reds (default)' },
-  { value: 'lt-dark', name: 'LT Dark', desc: 'Dark mode with inverted colors' },
-  { value: 'muxday', name: 'MuxDay', desc: 'Blue analogous shades' },
-  { value: 'amrella', name: 'Amrella', desc: 'Green analogous shades' },
+  { value: 'lt-classic', name: 'LT Classic', desc: 'Default theme. Fiery orange and reds.' },
+  { value: 'lt-dark', name: 'LT Dark', desc: 'Dark mode. Fiery orange and reds.' },
+  { value: 'muxday', name: 'MuxDay', desc: 'Alternate theme in honor of the previous MuxDay platform. Analogous shades of blue.' },
+  { value: 'amrella', name: 'Amrella', desc: 'Alternate theme in honor of the previous Amrella platform. Analogous shades of green.' },
 ];
 
 interface ThemesProps {
@@ -29,17 +29,17 @@ export const Themes = ({ currentTheme, onChange, loading }: ThemesProps) => {
           key={preset.value}
           className={`p-3 rounded-lg cursor-pointer transition-all border ${
             currentTheme === preset.value
-              ? 'bg-blue-50 border-blue-200'
-              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+              ? 'bg-[rgba(var(--color-primary),0.1)] border-[rgb(var(--color-primary))]' 
+              : 'bg-[rgb(var(--color-surface-hover))] border-[rgb(var(--color-border))] hover:bg-[rgb(var(--color-border))]'
           }`}
           onClick={() => !loading && onChange(preset.value)}
         >
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold">{preset.name}</h4>
-              <p className="text-sm text-gray-600">{preset.desc}</p>
+              <h4 className="font-semibold text-[rgb(var(--color-text))]">{preset.name}</h4>
+              <p className="text-sm text-[rgb(var(--color-text-secondary))]">{preset.desc}</p>
             </div>
-            {currentTheme === preset.value && <CheckCircle size={16} className="text-blue-500" />}
+            {currentTheme === preset.value && <CheckCircle size={16} className="text-[rgb(var(--color-primary))]" />}
           </div>
         </div>
       ))}
