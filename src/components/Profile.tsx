@@ -192,7 +192,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
           {profile.banner_url ? (
             <img src={profile.banner_url} className="w-full h-full object-cover" alt="Banner" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-purple-600" />
+            <div className="w-full h-full bg-gradient-to-br from-[rgba(var(--color-accent),1)] to-[rgba(var(--color-primary),1)]" />
           )}
         </div>
 
@@ -231,10 +231,10 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                  <button
   onClick={() => {
     if (!profile?.username) return;
-    
+
     // 1. Set URL
     window.history.replaceState({}, '', `/?${profile.username}`);
-    
+
     // 2. Trigger BOTH: App.tsx handler + direct open in Messages
     onMessage?.(profile);
     window.dispatchEvent(new CustomEvent('openDirectMessage', { detail: profile }));
@@ -324,7 +324,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                 <button onClick={() => !isOwnProfile && goToProfile(profile.id)} className="font-bold text-2xl hover:underline">
                   {profile.display_name}
                 </button>
-                {profile.verified && <BadgeCheck size={22} className="text-orange-500" />}
+                {profile.verified && <BadgeCheck size={22} className="text-[rgb(var(--color-accent))]" />}
               </div>
               <p className="text-gray-500">@{profile.username}</p>
               {profile.bio && <p className="mt-3 text-gray-800">{profile.bio}</p>}
@@ -357,7 +357,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
           <button onClick={() => goToProfile(post.user_id)} className="font-bold hover:underline">
             {post.profiles?.display_name}
           </button>
-          {post.profiles?.verified && <BadgeCheck size={16} className="text-orange-500" />}
+          {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
           <span className="text-gray-500 text-sm">@{post.profiles?.username}</span>
           <span className="text-gray-500 text-sm">
             · {new Date(post.created_at).toLocaleDateString()}
