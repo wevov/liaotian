@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase, Profile as ProfileType } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Mail, Lock, User, AlertCircle, CheckCircle, Settings, Check } from 'lucide-react';
+import { BadgeCheck, Mail, Lock, User, AlertCircle, CheckCircle, Settings as SettingsLucideIcon, Check } from 'lucide-react';
 import { Themes } from './Themes';
 
 export const Settings = () => {
@@ -112,7 +112,7 @@ export const Settings = () => {
   return (
     <div className="max-w-2xl mx-auto p-4 space-y-8">
       <div className="flex items-center gap-2">
-        <Settings size={24} className="text-gray-600" />
+        <SettingsLucideIcon size={24} className="text-gray-600" />
         <h1 className="text-2xl font-bold">Settings</h1>
       </div>
 
