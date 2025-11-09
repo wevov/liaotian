@@ -17,7 +17,7 @@ export const CustomPage = ({ slug }: CustomPageProps) => {
   useEffect(() => {
     const fetchPage = async () => {
         // public/pages in project
-        const res = await fetch(`/pages/${slug}`, { cache: 'no-store' });
+        const res = await fetch(`/pages/${slug}.md`, { cache: 'no-store' });
         if (res.ok) {
           const text = await res.text();
           setContent(text);
@@ -67,7 +67,7 @@ export const CustomPage = ({ slug }: CustomPageProps) => {
               </div>
               <p className="text-[rgb(var(--color-text-secondary))]">@{profile?.username || 'liaotian'}</p>
               <p className="text-sm text-[rgb(var(--color-text-secondary))] mt-1">
-                Official LiaoTian Instance • Self-hosted social platform
+                <a href="/">Sign Up</a> for LiaoTian
               </p>
             </div>
           </div>
