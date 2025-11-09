@@ -84,7 +84,7 @@ const Main = () => {
     return () => window.removeEventListener('navigateToProfile', handler);
   }, []);
 
-  if (loading) return <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 flex items-center justify-center text-2xl font-bold">Loading...</div>;
+  if (loading) return <div className="min-h-screen bg-gradient-to-br from-red-50 to-[rgba(var(--color-primary),0.05)] flex items-center justify-center text-2xl font-bold">Loading...</div>;
 
   // === NOT LOGGED IN? SHOW AUTH OR PUBLIC PROFILE ===
   if (!user || !profile) {
@@ -94,10 +94,10 @@ const Main = () => {
         <div className="min-h-screen bg-gray-50">
           <div className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
             <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-              <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent">
+              <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-[rgba(var(--color-accent),1)] to-red-700 bg-clip-text text-transparent">
                 聊天
               </h1>
-              <a href="/" className="text-orange-600 hover:text-orange-700 font-bold">← Back to Home</a>
+              <a href="/" className="text-[rgb(var(--color-primary))] hover:text-[rgba(var(--color-primary),0.8)] font-bold">← Back to Home</a>
             </div>
           </div>
           <Profile userId={selectedProfileId} />
@@ -124,7 +124,7 @@ const handleSettings = () => {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-          <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-orange-500 to-red-700 bg-clip-text text-transparent">
+          <h1 className="text-2xl font-black bg-gradient-to-r from-red-600 via-[rgba(var(--color-accent),1)] to-red-700 bg-clip-text text-transparent">
             聊天
           </h1>
           <div className="flex items-center gap-2">
@@ -140,13 +140,13 @@ const handleSettings = () => {
                 setSelectedProfileId(undefined);
                 window.history.replaceState({}, '', '/');
               }}
-              className={`p-3 rounded-full transition ${view === 'feed' ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full transition ${view === 'feed' ? 'bg-[rgba(var(--color-primary),0.1)] text-[rgb(var(--color-primary))]' : 'hover:bg-gray-100'}`}
             >
               <Home size={24} />
             </button>
             <button
               onClick={() => { setView('messages'); setSelectedProfileId(undefined); }}
-              className={`p-3 rounded-full transition ${view === 'messages' ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
+              className={`p-3 rounded-full transition ${view === 'messages' ? 'bg-[rgba(var(--color-primary),0.1)] text-[rgb(var(--color-primary))]' : 'hover:bg-gray-100'}`}
             >
               <MessageSquare size={24} />
             </button>
@@ -158,7 +158,7 @@ const handleSettings = () => {
     setSelectedProfileId(undefined);
     setView('profile');
   }}
-  className={`p-3 rounded-full transition ${view === 'profile' && !selectedProfileId ? 'bg-orange-100 text-orange-600' : 'hover:bg-gray-100'}`}
+  className={`p-3 rounded-full transition ${view === 'profile' && !selectedProfileId ? 'bg-[rgba(var(--color-primary),0.1)] text-[rgb(var(--color-primary))]' : 'hover:bg-gray-100'}`}
 >
   <User size={24} />
 </button>
