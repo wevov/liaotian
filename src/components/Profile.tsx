@@ -2,9 +2,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText } from 'lucide-react';
+import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon } from 'lucide-react';
 
-export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (profile: ProfileType) => void }) => {
+export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; onMessage?: (profile: ProfileType) => void; onSettings?: () => void }) => {
   const [profile, setProfile] = useState<ProfileType | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -192,7 +192,7 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
           {profile.banner_url ? (
             <img src={profile.banner_url} className="w-full h-full object-cover" alt="Banner" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-orange-400 to-purple-600" />
+            <div className="w-full h-full bg-gradient-to-br from-[rgba(var(--color-accent),1)] to-[rgba(var(--color-primary),1)]" />
           )}
         </div>
 
@@ -208,22 +208,33 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
 
             <div className="mt-4 sm:mt-0 flex gap-2">
               {isOwnProfile ? (
-                <button
-                  onClick={() => (isEditing ? updateProfile() : setIsEditing(true))}
-                  className="px-5 py-2.5 border border-gray-300 rounded-full font-semibold hover:bg-gray-50 flex items-center gap-2 transition"
-                >
-                  {isEditing ? <Check size={18} /> : <Edit2 size={18} />}
-                  {isEditing ? 'Save' : 'Edit Profile'}
-                </button>
+                <>
+                  <button
+                    onClick={() => (isEditing ? updateProfile() : setIsEditing(true))}
+                    className="px-5 py-2.5 border border-gray-300 rounded-full font-semibold hover:bg-gray-50 flex items-center gap-2 transition"
+                  >
+                    {isEditing ? <Check size={18} /> : <Edit2 size={18} />}
+                    {isEditing ? 'Save' : 'Edit Profile'}
+                  </button>
+                  {onSettings && (
+                    <button
+                      onClick={onSettings}
+                      className="px-5 py-2.5 border border-gray-300 rounded-full font-semibold hover:bg-gray-50 flex items-center gap-2 transition"
+                    >
+                      <SettingsIcon size={18} />
+                      Settings
+                    </button>
+                  )}
+                </>
               ) : (
                 <>
                  <button
   onClick={() => {
     if (!profile?.username) return;
-    
+
     // 1. Set URL
     window.history.replaceState({}, '', `/?${profile.username}`);
-    
+
     // 2. Trigger BOTH: App.tsx handler + direct open in Messages
     onMessage?.(profile);
     window.dispatchEvent(new CustomEvent('openDirectMessage', { detail: profile }));
@@ -313,7 +324,7 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
                 <button onClick={() => !isOwnProfile && goToProfile(profile.id)} className="font-bold text-2xl hover:underline">
                   {profile.display_name}
                 </button>
-                {profile.verified && <BadgeCheck size={22} className="text-orange-500" />}
+                {profile.verified && <BadgeCheck size={22} className="text-[rgb(var(--color-accent))]" />}
               </div>
               <p className="text-gray-500">@{profile.username}</p>
               {profile.bio && <p className="mt-3 text-gray-800">{profile.bio}</p>}
@@ -346,7 +357,7 @@ export const Profile = ({ userId, onMessage }: { userId?: string; onMessage?: (p
           <button onClick={() => goToProfile(post.user_id)} className="font-bold hover:underline">
             {post.profiles?.display_name}
           </button>
-          {post.profiles?.verified && <BadgeCheck size={16} className="text-orange-500" />}
+          {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
           <span className="text-gray-500 text-sm">@{post.profiles?.username}</span>
           <span className="text-gray-500 text-sm">
             · {new Date(post.created_at).toLocaleDateString()}

@@ -1,3 +1,4 @@
+// lib/supabase.ts
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -14,6 +15,8 @@ export type Profile = {
   banner_url: string;
   verified: boolean;
   created_at: string;
+  theme: string;
+  verification_request: string;
 };
 
 export type Post = {
