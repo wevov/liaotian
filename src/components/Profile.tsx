@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2 } from 'lucide-react';  // Added MoreVertical, Trash2 for context menu
+import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon } from 'lucide-react';
 
 export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; onMessage?: (profile: ProfileType) => void; onSettings?: () => void }) => {
   const [profile, setProfile] = useState<ProfileType | null>(null);
@@ -27,8 +27,6 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
 
   const avatarFileInput = useRef<HTMLInputElement>(null);
   const bannerFileInput = useRef<HTMLInputElement>(null);
-
-  const [openMenuPostId, setOpenMenuPostId] = useState<string | null>(null);  // Added for context menu
 
   useEffect(() => {
     if (targetUserId) {
@@ -185,19 +183,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     }
   };
 
-  const deletePost = async (postId: string) => {
-    await supabase.from('posts').delete().eq('id', postId);
-    loadPosts();
-    setOpenMenuPostId(null);
-  };
-
   if (!profile) return <div className="text-center p-8">Loading...</div>;
-
-  const isOnline = (prof: ProfileType) => {
-    if (!prof.last_seen) return false;
-    const lastSeenDate = new Date(prof.last_seen);
-    return (Date.now() - lastSeenDate.getTime()) < 5 * 60 * 1000;  // 5 minutes
-  };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -359,48 +345,23 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
         {posts.map((post) => (
   <div key={post.id} className="border-b border-gray-200 p-4 hover:bg-gray-50 transition bg-white">
     <div className="flex gap-4 items-start">
-      <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0 relative">
+      <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0">
         <img
           src={post.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.profiles?.username}`}
           className="w-12 h-12 rounded-full hover:opacity-80 transition"
           alt="Avatar"
         />
-        {isOnline(post.profiles! ) && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-        )}
       </button>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap justify-between">
-          <div className="flex items-center gap-1">
-            <button onClick={() => goToProfile(post.user_id)} className="font-bold hover:underline">
-              {post.profiles?.display_name}
-            </button>
-            {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
-            <span className="text-gray-500 text-sm">@{post.profiles?.username}</span>
-            <span className="text-gray-500 text-sm">
-              · {new Date(post.created_at).toLocaleDateString()}
-            </span>
-          </div>
-          {isOwnProfile && (
-            <div className="relative">
-              <button
-                onClick={() => setOpenMenuPostId(openMenuPostId === post.id ? null : post.id)}
-                className="p-1 rounded-full hover:bg-gray-200"
-              >
-                <MoreVertical size={16} />
-              </button>
-              {openMenuPostId === post.id && (
-                <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg p-2 z-10">
-                  <button
-                    onClick={() => deletePost(post.id)}
-                    className="flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-50 w-full text-left"
-                  >
-                    <Trash2 size={16} /> Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+        <div className="flex items-center gap-1 flex-wrap">
+          <button onClick={() => goToProfile(post.user_id)} className="font-bold hover:underline">
+            {post.profiles?.display_name}
+          </button>
+          {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
+          <span className="text-gray-500 text-sm">@{post.profiles?.username}</span>
+          <span className="text-gray-500 text-sm">
+            · {new Date(post.created_at).toLocaleDateString()}
+          </span>
         </div>
         <p className="mt-1 whitespace-pre-wrap break-words">{post.content}</p>
         {post.media_url && (
@@ -448,15 +409,12 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
 
                 return (
                   <div key={p.id} className="flex items-center justify-between p-4 hover:bg-gray-50 border-b">
-                    <button onClick={() => goToProfile(p.id)} className="flex items-center gap-3 flex-1 text-left relative">
+                    <button onClick={() => goToProfile(p.id)} className="flex items-center gap-3 flex-1 text-left">
                       <img
                         src={p.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.username}`}
                         className="w-10 h-10 rounded-full"
                         alt=""
                       />
-                      {isOnline(p) && (
-                        <span className="absolute bottom-0 left-7 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
-                      )}
                       <div>
                         <div className="font-semibold">{p.display_name}</div>
                         <div className="text-sm text-gray-500">@{p.username}</div>

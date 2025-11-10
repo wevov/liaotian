@@ -160,12 +160,6 @@ export const Feed = () => {
     return null;
   };
 
-  const isOnline = (prof: Profile) => {
-    if (!prof.last_seen) return false;
-    const lastSeenDate = new Date(prof.last_seen);
-    return (Date.now() - lastSeenDate.getTime()) < 5 * 60 * 1000;  // 5 minutes
-  };
-
   return (
     <div className="max-w-2xl mx-auto">
       <div ref={scrollRef} className="sticky top-0 z-40 bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] shadow-sm">
@@ -177,7 +171,7 @@ export const Feed = () => {
               placeholder="What's happening?"
               rows={3}
               className="w-full px-4 py-3 border border-[rgb(var(--color-border))] rounded-2xl focus:outline-none focus:border-[rgb(var(--color-accent))] resize-none text-[rgb(var(--color-text))]"
-  autoFocus
+              autoFocus
             />
             
             {(file || remoteUrl) && (
@@ -269,15 +263,12 @@ export const Feed = () => {
         {posts.map((post) => (
           <div key={post.id} className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]" >
             <div className="flex gap-4 items-start">
-              <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0 relative">
+              <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0">
                 <img
                   src={post.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.profiles?.username}`}
                   className="w-12 h-12 rounded-full hover:opacity-80 transition"
                   alt="Avatar"
                 />
-                {isOnline(post.profiles!) && (
-                  <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[rgb(var(--color-background))]" />
-                )}
               </button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 flex-wrap">
