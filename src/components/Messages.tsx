@@ -1,8 +1,69 @@
 // src/components/Messages.tsx
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase, Message, Profile, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Send, BadgeCheck, Search, ArrowLeft, X, Paperclip, FileText, Link } from 'lucide-react';
+import { Send, BadgeCheck, Search, ArrowLeft, X, Paperclip, FileText, Link, CornerUpLeft, MessageSquare } from 'lucide-react';
+
+// --- Utility Functions ---
+
+const IS_ONLINE_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+const isOnline = (lastSeen: string | null): boolean => {
+  if (!lastSeen) return false;
+  const lastSeenTime = new Date(lastSeen).getTime();
+  const now = new Date().getTime();
+  return (now - lastSeenTime) < IS_ONLINE_THRESHOLD;
+};
+
+const formatTime = (timestamp: string): string => {
+  return new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+};
+
+const formatDate = (timestamp: string): string => {
+  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// --- Helper Components ---
+
+// Component to display user avatar with an optional online status indicator
+const AvatarWithStatus = ({ profile, size = '10' }: { profile: Profile, size?: string }) => {
+  const online = isOnline(profile.last_seen);
+  return (
+    <div className={`relative w-${size} h-${size} flex-shrink-0`}>
+      <img
+        src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`}
+        className={`w-full h-full rounded-full object-cover`}
+        alt={`${profile.display_name}'s avatar`}
+      />
+      {online && (
+        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[rgb(var(--color-surface))]"></div>
+      )}
+    </div>
+  );
+};
+
+// Component to display the replied-to message snippet
+const RepliedMessageSnippet = ({ message, isOwn }: { message: Message, isOwn: boolean }) => {
+    // Determine desaturated background color based on theme
+    const bgColor = isOwn ? 'rgba(var(--color-primary), 0.1)' : 'rgba(var(--color-border), 0.5)';
+    const textColor = isOwn ? 'rgba(var(--color-text), 0.7)' : 'rgba(var(--color-text), 0.7)';
+
+    return (
+        <div 
+            className="p-2 mb-1 rounded-lg text-sm italic overflow-hidden break-words"
+            style={{ backgroundColor: bgColor, color: textColor }}
+        >
+            <p className="font-semibold truncate">
+                {message.profiles?.display_name || 'User'}
+            </p>
+            <p className="line-clamp-2">
+                {message.content || (message.media_url ? '[Media Content]' : '[Empty Message]')}
+            </p>
+        </div>
+    );
+};
+
+// --- Main Component ---
 
 export const Messages = () => {
   const [conversations, setConversations] = useState<Profile[]>([]);
@@ -20,6 +81,10 @@ export const Messages = () => {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Reply System State
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<Message | null>(null);
+  
   const typingChannelRef = useRef<any>(null);
   const outgoingTypingChannelRef = useRef<any>(null);
 
@@ -29,489 +94,479 @@ export const Messages = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const goToProfile = async (profileId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', profileId)
-      .single();
-    if (data) {
-      window.history.replaceState({}, '', `/?${data.username}`);
+  const loadConversations = useCallback(async () => {
+    if (!user?.id) return;
+    // Fetch profiles the current user has exchanged messages with
+    const { data, error } = await supabase.rpc('get_conversation_partners', { user_id_input: user.id });
+
+    if (error) {
+      console.error('Error fetching conversations:', error);
+    } else {
+      setConversations(data || []);
     }
-    window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
-  };
-
-  const loadConversations = async () => {
-    const { data } = await supabase
-      .from('messages')
-      .select(`
-        id,
-        sender_id,
-        recipient_id,
-        created_at,
-        sender:profiles!sender_id(id, username, display_name, avatar_url, verified),
-        recipient:profiles!recipient_id(id, username, display_name, avatar_url, verified)
-      `)
-      .or(`sender_id.eq.${user!.id},recipient_id.eq.${user!.id}`)
-      .order('created_at', { ascending: false });
-
-    const convMap = new Map<string, { profile: Profile; latest: string }>();
-    data?.forEach((msg: any) => {
-      const other = msg.sender_id === user!.id ? msg.recipient : msg.sender;
-      if (other) {
-        const existing = convMap.get(other.id);
-        if (!existing || msg.created_at > existing.latest) {
-          convMap.set(other.id, { profile: other, latest: msg.created_at });
-        }
-      }
-    });
-
-    const sorted = Array.from(convMap.values())
-      .sort((a, b) => b.latest.localeCompare(a.latest))
-      .map(c => c.profile);
-
-    setConversations(sorted);
-  };
+  }, [user?.id]);
 
   useEffect(() => {
-    const handleOpenDM = (e: any) => {
-      const profile = e.detail;
-      if (profile && profile.id !== user?.id) {
-        setSelectedUser(profile);
-        setShowSidebar(false);
-        setSearchQuery('');
-      }
-    };
+    loadConversations();
 
-    window.addEventListener('openDirectMessage', handleOpenDM);
-    return () => window.removeEventListener('openDirectMessage', handleOpenDM);
-  }, [user]);
-
-  useEffect(() => {
-    if (user) loadConversations();
-  }, [user]);
-
-  const [searchResults, setSearchResults] = useState<Profile[]>([]);
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
-    }
-
-    const search = async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
-        .neq('id', user!.id)
-        .limit(20);
-      setSearchResults(data || []);
-    };
-    const debounce = setTimeout(search, 300);
-    return () => clearTimeout(debounce);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!selectedUser) {
-      if (typingChannelRef.current) {
-        typingChannelRef.current.unsubscribe();
-        typingChannelRef.current = null;
-      }
-      if (outgoingTypingChannelRef.current) {
-        outgoingTypingChannelRef.current.unsubscribe();
-        outgoingTypingChannelRef.current = null;
-      }
-      return;
-    }
-
-    loadMessages(selectedUser.id);
-    setShowSidebar(false);
-
-    const messageChannel = supabase
-      .channel(`messages:${selectedUser.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+    // Subscribe to profile changes for last_seen updates (online status)
+    const profileChannel = supabase
+      .channel('public:profiles_last_seen')
+      .on('postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
         (payload) => {
-          const msg = payload.new as Message;
-          if (
-            (msg.sender_id === user!.id && msg.recipient_id === selectedUser.id) ||
-            (msg.sender_id === selectedUser.id && msg.recipient_id === user!.id)
-          ) {
-            setMessages((prev) => [...prev, msg]);
-            scrollToBottom();
-            loadConversations();
+          const updatedProfile = payload.new as Profile;
+          
+          // Update conversations list for online status
+          setConversations(prev => prev.map(p => 
+            p.id === updatedProfile.id ? { ...p, last_seen: updatedProfile.last_seen } : p
+          ));
+
+          // Update selected user's online status
+          if (selectedUser && selectedUser.id === updatedProfile.id) {
+             setSelectedUser(prev => prev ? { ...prev, last_seen: updatedProfile.last_seen } : null);
           }
         }
       )
       .subscribe();
 
-    const incomingChannelName = `typing:${selectedUser.id}:${user!.id}`;
-    typingChannelRef.current = supabase.channel(incomingChannelName);
-
-    typingChannelRef.current
-      .on('presence', { event: 'sync' }, () => {
-        const state = typingChannelRef.current.presenceState();
-        const typing = Object.values(state).flat().some((p: any) => p.typing === true);
-        setIsOtherTyping(typing);
-      })
-      .subscribe();
-
-    const outgoingChannelName = `typing:${user!.id}:${selectedUser.id}`;
-    outgoingTypingChannelRef.current = supabase.channel(outgoingChannelName);
-
-    outgoingTypingChannelRef.current
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await outgoingTypingChannelRef.current.track({ typing: false });
-        }
-      });
-
     return () => {
-      supabase.removeChannel(messageChannel);
-      if (typingChannelRef.current) {
-        typingChannelRef.current.unsubscribe();
-        typingChannelRef.current = null;
-      }
-      if (outgoingTypingChannelRef.current) {
-        outgoingTypingChannelRef.current.untrack();
-        outgoingTypingChannelRef.current.unsubscribe();
-        outgoingTypingChannelRef.current = null;
-      }
+      supabase.removeChannel(profileChannel);
     };
-  }, [selectedUser, user]);
+  }, [user?.id, loadConversations, selectedUser]);
 
-  const sendTypingStatus = async (typing: boolean) => {
-    if (!outgoingTypingChannelRef.current) return;
-    try {
-      await outgoingTypingChannelRef.current.track({ typing });
-    } catch (err) {}
-  };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setContent(value);
+  const getMessages = useCallback(async (targetUserId: string) => {
+    if (!user?.id || !targetUserId) return;
 
-    if (value.trim()) {
-      sendTypingStatus(true);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        sendTypingStatus(false);
-      }, 1000);
+    // Load messages and joined reply_to_message content
+    const { data: initialMessages, error } = await supabase
+      .from('messages')
+      .select(`
+        *,
+        reply_to_message:messages!messages_reply_to_id_fkey(
+          id, content, media_url, profiles(display_name)
+        )
+      `)
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${user.id})`)
+      .order('created_at', { ascending: true }) as { data: (Message & { reply_to_message: Message | null })[] | null, error: any };
+    
+    if (error) {
+      console.error('Error fetching messages:', error);
     } else {
-      sendTypingStatus(false);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      setMessages(initialMessages || []);
+      // If there's a selected user, update their last_seen
+      await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
+      
     }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (selectedUser?.id) {
+      getMessages(selectedUser.id);
+      const channelId = `chat:${Math.min(user.id, selectedUser.id)}_${Math.max(user.id, selectedUser.id)}`;
+
+      // Setup Typing Indicator Channel
+      if (typingChannelRef.current) {
+        supabase.removeChannel(typingChannelRef.current);
+      }
+      typingChannelRef.current = supabase.channel(`typing-status-${channelId}`);
+      
+      typingChannelRef.current
+        .on('broadcast', { event: 'typing' }, (payload) => {
+          if (payload.payload.senderId === selectedUser.id) {
+            setIsOtherTyping(true);
+            if (typingTimeoutRef.current) {
+              clearTimeout(typingTimeoutRef.current);
+            }
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsOtherTyping(false);
+            }, 1500); // Hide typing after 1.5s
+          }
+        })
+        .subscribe();
+      
+      // Setup Outgoing Typing Channel (for broadcasting 'typing' to the other user)
+      if (outgoingTypingChannelRef.current) {
+        supabase.removeChannel(outgoingTypingChannelRef.current);
+      }
+      outgoingTypingChannelRef.current = supabase.channel(`typing-status-${channelId}`);
+      outgoingTypingChannelRef.current.subscribe();
+
+      // Setup Realtime Messages Channel
+      const messageChannel = supabase
+        .channel(`messages-channel-${channelId}`)
+        .on('postgres_changes', 
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` }, 
+          async (payload) => {
+            if (payload.new.sender_id === selectedUser.id) {
+                // Manually fetch the new message with the reply_to_message join
+                const { data: newMessage, error } = await supabase
+                    .from('messages')
+                    .select(`
+                      *,
+                      reply_to_message:messages!messages_reply_to_id_fkey(
+                        id, content, media_url, profiles(display_name)
+                      )
+                    `)
+                    .eq('id', payload.new.id)
+                    .single();
+
+                if (!error && newMessage) {
+                    setMessages((prev) => [...prev, newMessage as Message]);
+                    // Update user's last_seen whenever a message is received
+                    await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', user.id);
+                }
+            }
+            // Message sent by self is already added in handleSubmit, no need to listen for it here.
+          }
+        )
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(typingChannelRef.current);
+        supabase.removeChannel(outgoingTypingChannelRef.current);
+        supabase.removeChannel(messageChannel);
+      };
+    }
+  }, [selectedUser?.id, user?.id, getMessages]);
+
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+  
+  // Typing Indicator Logic
+  const handleTyping = () => {
+    setContent(prevContent => {
+      // Broadcast typing status when content changes
+      if (outgoingTypingChannelRef.current?.state === 'joined') {
+        outgoingTypingChannelRef.current.send({
+          type: 'broadcast',
+          event: 'typing',
+          payload: { senderId: user.id }
+        });
+      }
+      return (prevContent); // Return the content for the state update
+    });
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() && !file && !remoteUrl.trim() || !selectedUser) return;
+    if (!content.trim() && !file && !remoteUrl.trim() || isUploading || !selectedUser) return;
 
+    let media_url = remoteUrl.trim();
     setIsUploading(true);
-    setUploadProgress(0);
-
-    let media_url = null;
-    let media_type = null;
 
     if (file) {
-      const result = await uploadMedia(file, 'messages', (percent) => {
-        setUploadProgress(percent);
-      });
-      if (!result) {
+      try {
+        const url = await uploadMedia(file, 'message_media', setUploadProgress);
+        media_url = url;
+      } catch (error) {
+        console.error('File upload failed:', error);
         setIsUploading(false);
         return;
       }
-      media_url = result.url;
-      media_type = result.type;
-    } else if (remoteUrl.trim()) {
-      media_url = remoteUrl.trim();
-      if (remoteUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
-        media_type = 'image';
-      } else if (remoteUrl.match(/\.(mp4|webm|mov|avi)$/i)) {
-        media_type = 'video';
-      } else {
-        media_type = 'document';
-      }
     }
 
-    sendTypingStatus(false);
-    const { data } = await supabase
+    const newMessage: Partial<Message> = {
+      sender_id: user.id,
+      receiver_id: selectedUser.id,
+      content: content.trim(),
+      media_url: media_url || null,
+      reply_to_id: replyToId, // Include reply_to_id
+      read: false, // Messages are unread by default
+    };
+
+    const { data, error } = await supabase
       .from('messages')
-      .insert({
-        sender_id: user!.id,
-        recipient_id: selectedUser.id,
-        content,
-        media_url,
-        media_type,
-      })
-      .select()
+      .insert(newMessage)
+      .select(`
+        *,
+        reply_to_message:messages!messages_reply_to_id_fkey(
+          id, content, media_url, profiles(display_name)
+        )
+      `)
       .single();
 
-    if (data) {
+    setIsUploading(false);
+    
+    if (error) {
+      console.error('Error sending message:', error);
+    } else {
+      setMessages((prev) => [...prev, data as Message]);
       setContent('');
       setFile(null);
       setRemoteUrl('');
-      setIsUploading(false);
       setUploadProgress(0);
+      cancelReply(); // Cancel reply state after sending
+      // After sending, refresh conversations just in case the partner wasn't there
+      loadConversations();
     }
   };
 
-  const loadMessages = async (recipientId: string) => {
-    const { data } = await supabase
-      .from('messages')
-      .select('*')
-      .or(
-        `and(sender_id.eq.${user!.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user!.id})`
-      )
-      .order('created_at', { ascending: true });
-    setMessages(data || []);
-    setTimeout(scrollToBottom, 100);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setRemoteUrl(''); // Clear remote URL if a local file is selected
+    } else {
+      setFile(null);
+    }
   };
 
-  const displayList = searchQuery ? searchResults : conversations;
-
-  const getPreview = () => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      if (file.type.startsWith('image/')) {
-        return <img src={url} className="max-h-32 rounded-lg" alt="Preview" />;
-      }
-      if (file.type.startsWith('video/')) {
-        return <video src={url} className="max-h-32 rounded-lg" controls />;
-      }
-      return (
-        <div className="flex items-center gap-2 text-sm text-[rgb(var(--color-text))]">
-          <FileText size={16} />
-          <span>{file.name}</span>
-        </div>
-      );
+  const handleCancelMedia = () => {
+    setFile(null);
+    setRemoteUrl('');
+    setUploadProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''; // Clear file input
     }
-    if (remoteUrl) {
-      if (remoteUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
-        return <img src={remoteUrl} className="max-h-32 rounded-lg" alt="Remote preview" />;
-      }
-      if (remoteUrl.match(/\.(mp4|webm|mov|avi)$/i)) {
-        return <video src={remoteUrl} className="max-h-32 rounded-lg" controls />;
-      }
-      return (
-        <div className="flex items-center gap-2 text-sm text-[rgb(var(--color-text))]">
-          <Link size={16} />
-          <span className="truncate max-w-[150px]">{remoteUrl}</span>
-        </div>
-      );
-    }
-    return null;
   };
+
+  const filteredConversations = conversations.filter(p => 
+    p.display_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    p.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleReply = (message: Message) => {
+    setReplyToId(message.id);
+    setReplyingToMessage(message);
+  };
+
+  const cancelReply = () => {
+    setReplyToId(null);
+    setReplyingToMessage(null);
+  };
+
 
   return (
-    <div className="flex h-screen bg-[rgb(var(--color-background))] overflow-hidden">
-      <div className={`w-full md:w-96 bg-[rgb(var(--color-surface))] border-r border-[rgb(var(--color-border))] flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:relative fixed inset-y-0 left-0 z-40 md:z-auto`}>
-        <div className="p-4 border-b border-[rgb(var(--color-border))] sticky top-0 bg-[rgb(var(--color-surface))] z-10">
-          <h2 className="text-3xl font-extrabold text-[rgb(var(--color-text))] mb-4">Chats</h2>
+    <div className="flex flex-1 h-full w-full max-w-7xl mx-auto shadow-xl rounded-xl overflow-hidden bg-[rgb(var(--color-surface))]">
+      
+      {/* Sidebar for Conversations (Chat List) */}
+      <div 
+        className={`flex-col border-r border-[rgb(var(--color-border))] md:flex transition-all duration-300 ${showSidebar ? 'flex w-full md:w-80' : 'hidden md:w-0'}`}
+      >
+        <div className="p-4 border-b border-[rgb(var(--color-border))] flex items-center gap-2">
+          <MessageSquare size={24} className="text-[rgb(var(--color-primary))]" />
+          <h2 className="text-xl font-bold text-[rgb(var(--color-text))]">Chats</h2>
+        </div>
+        
+        {/* Search Input */}
+        <div className="p-3 border-b border-[rgb(var(--color-border))]">
           <div className="relative">
-            <Search size={20} className="absolute left-3 top-3.5 text-[rgb(var(--color-text-secondary))]" />
+            <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--color-text-secondary))]" />
             <input
               type="text"
-              placeholder="Search people..."
+              placeholder="Search conversations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-[rgb(var(--color-border))] rounded-lg focus:outline-none focus:border-[rgb(var(--color-accent))] bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))]"
+              className="w-full pl-10 pr-4 py-2 border border-[rgb(var(--color-border))] rounded-full focus:outline-none focus:border-[rgb(var(--color-accent))] bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))]"
             />
           </div>
         </div>
-
+        
+        {/* Conversation List */}
         <div className="flex-1 overflow-y-auto">
-          {displayList.length === 0 && (
-            <div className="p-8 text-center text-[rgb(var(--color-text-secondary))]">
-              {searchQuery ? 'No users found' : 'No conversations yet'}
-            </div>
-          )}
-
-          {displayList.map((u) => (
-            <button
-              key={u.id}
-              onClick={() => {
-                setSelectedUser(u);
-                setShowSidebar(false);
-                setSearchQuery('');
-              }}
-              className={`w-full flex items-center gap-3 p-4 transition border-b border-[rgb(var(--color-border))] ${selectedUser?.id === u.id ? 'bg-[rgb(var(--color-surface-hover))]' : 'hover:bg-[rgb(var(--color-surface-hover))]'}`}
-            >
-              <img
-                src={u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.username}`}
-                className="w-14 h-14 rounded-full object-cover"
-                alt=""
-              />
-              <div className="text-left flex-1 min-w-0">
-                <div className="font-semibold flex items-center gap-1 truncate text-[rgb(var(--color-text))]">
-                  {u.display_name}
-                  {u.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))] flex-shrink-0" />}
+          {filteredConversations.length === 0 ? (
+            <p className="p-4 text-[rgb(var(--color-text-secondary))] text-center">No chats found.</p>
+          ) : (
+            filteredConversations.map((p) => (
+              <div
+                key={p.id}
+                onClick={() => {
+                  setSelectedUser(p);
+                  setShowSidebar(false);
+                }}
+                className={`flex items-center p-3 gap-3 cursor-pointer border-b border-[rgb(var(--color-border))] transition ${selectedUser?.id === p.id ? 'bg-[rgba(var(--color-primary),0.1)]' : 'hover:bg-[rgb(var(--color-surface-hover))]'}`}
+              >
+                <AvatarWithStatus profile={p} size="12" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-[rgb(var(--color-text))] truncate">{p.display_name} {p.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-primary))] inline ml-1" />}</p>
+                  <p className="text-sm text-[rgb(var(--color-text-secondary))] truncate">@{p.username}</p>
                 </div>
-                <div className="text-sm text-[rgb(var(--color-text-secondary))] truncate">@{u.username}</div>
               </div>
-            </button>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
-      <div className={`flex-1 flex flex-col bg-[rgb(var(--color-background))] transition-all duration-300 ease-in-out ${selectedUser ? '' : 'hidden md:flex'}`}>
+      {/* Main Chat Area */}
+      <div className={`flex flex-col flex-1 transition-all duration-300 ${!showSidebar || selectedUser ? 'w-full' : 'hidden md:flex'}`}>
         {selectedUser ? (
           <>
-            <div className="bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] p-3 flex items-center gap-3 sticky top-0 z-20 shadow-sm">
-              <button onClick={() => setShowSidebar(true)} className="md:hidden p-1 rounded-full hover:bg-[rgb(var(--color-surface-hover))] transition">
-                <ArrowLeft size={24} className="text-[rgb(var(--color-text-secondary))]" />
-              </button>
-              <button onClick={() => goToProfile(selectedUser.id)} className="flex items-center gap-3 flex-1 min-w-0">
-                <img
-                  src={selectedUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedUser.username}`}
-                  className="w-10 h-10 rounded-full object-cover"
-                  alt=""
-                />
-                <div className="text-left min-w-0">
-                  <div className="font-bold flex items-center gap-1 truncate text-[rgb(var(--color-text))]">
-                    {selectedUser.display_name}
-                    {selectedUser.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))] flex-shrink-0" />}
-                  </div>
-                  <div className="text-sm text-[rgb(var(--color-text-secondary))] truncate">@{selectedUser.username}</div>
+            {/* Chat Header */}
+            <div className="p-4 border-b border-[rgb(var(--color-border))] flex items-center justify-between sticky top-0 bg-[rgb(var(--color-surface))] z-10">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setShowSidebar(true)} className="md:hidden p-2 hover:bg-[rgb(var(--color-surface-hover))] rounded-full text-[rgb(var(--color-text))]">
+                  <ArrowLeft size={24} />
+                </button>
+                <AvatarWithStatus profile={selectedUser} size="10" />
+                <div>
+                  <h3 className="font-bold text-lg text-[rgb(var(--color-text))] flex items-center">
+                    {selectedUser.display_name} {selectedUser.verified && <BadgeCheck size={18} className="text-[rgb(var(--color-primary))] ml-1" />}
+                  </h3>
+                  <p className="text-sm text-[rgb(var(--color-text-secondary))]">
+                    {isOnline(selectedUser.last_seen) ? 'Active now' : `Last seen: ${formatTime(selectedUser.last_seen || new Date().toISOString())}`}
+                  </p>
                 </div>
+              </div>
+              <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-[rgb(var(--color-surface-hover))] rounded-full text-[rgb(var(--color-text))]">
+                <X size={24} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[rgb(var(--color-background))]">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.sender_id === user!.id ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] md:max-w-[65%] px-3 py-2 rounded-xl shadow-md ${
-                      msg.sender_id === user!.id
-                        ? 'bg-[rgb(var(--color-accent))] text-[rgb(var(--color-text-on-primary))] rounded-br-none'
-                        : 'bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] border border-[rgb(var(--color-border))] rounded-tl-none'
-                    }`}
-                  >
-                    {msg.media_url && (
-                      <div className="mt-2">
-                        {msg.media_type === 'image' && (
-                          <img src={msg.media_url} className="mb-2 rounded-lg max-w-full h-auto" alt="Message" />
-                        )}
-                        {msg.media_type === 'video' && (
-                          <video controls className="mb-2 rounded-lg max-w-full">
-                            <source src={msg.media_url} />
-                          </video>
-                        )}
-                        {msg.media_type === 'document' && (
-                          <a
-                            href={msg.media_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm text-[rgb(var(--color-primary))] underline"
-                          >
-                            <FileText size={14} /> Open File
-                          </a>
-                        )}
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
-                    <span
-                      className={`text-[10px] block mt-1.5 text-right ${
-                        msg.sender_id === user!.id ? 'text-[rgba(var(--color-text-on-primary),0.9)]' : 'text-[rgb(var(--color-text-secondary))]'
-                      }`}
-                    >
-                      {new Date(msg.created_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            {/* Message Area */}
+            {/* Added w-full to ensure it doesn't overflow its parent on mobile */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[rgb(var(--color-background))] w-full">
+              {messages.map((message, index) => {
+                const isOwn = message.sender_id === user.id;
+                const isFirstOfGroup = index === 0 || messages[index - 1].sender_id !== message.sender_id;
+                
+                // Find the replied-to message object
+                const repliedMessage = message.reply_to_message;
 
-              {isOtherTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-[rgb(var(--color-surface))] px-3 py-2 rounded-xl shadow-sm border border-[rgb(var(--color-border))] rounded-tl-none">
-                    <div className="flex gap-1 items-end">
-                      <span className="w-2 h-2 bg-[rgb(var(--color-text-secondary))] rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2 h-2 bg-[rgb(var(--color-text-secondary))] rounded-full animate-pulse" style={{ animationDelay: '200ms' }}></span>
-                      <span className="w-2 h-2 bg-[rgb(var(--color-text-secondary))] rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></span>
+                return (
+                  <div key={message.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`flex items-end gap-2 max-w-full sm:max-w-md ${isOwn ? 'flex-row-reverse' : 'flex-row'}`}>
+                      {/* Avatar (only show for the first message in a group, and not for own messages) */}
+                      {(!isOwn && isFirstOfGroup) ? (
+                        <AvatarWithStatus profile={selectedUser} size="10" />
+                      ) : (
+                        <div className="w-10 h-10 flex-shrink-0"></div> // Spacer to align messages
+                      )}
+                      
+                      {/* Message Content */}
+                      <div className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                        {/* Reply Button (always visible on hover/tap) */}
+                        <button
+                            onClick={() => handleReply(message)}
+                            title={`Reply to ${isOwn ? 'your' : selectedUser.display_name}'s message`}
+                            className={`p-1 text-[rgb(var(--color-text-secondary))] hover:text-[rgb(var(--color-accent))] transition self-${isOwn ? 'end' : 'start'} opacity-0 group-hover:opacity-100 focus:opacity-100 text-xs`}
+                        >
+                            <CornerUpLeft size={16} />
+                        </button>
+                        
+                        <div className={`p-3 rounded-xl max-w-full break-words relative group ${isOwn ? 'bg-[rgba(var(--color-primary),1)] text-[rgb(var(--color-text-on-primary))] rounded-br-none' : 'bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] rounded-tl-none'}`}>
+                          
+                          {/* Replied-to Message Snippet */}
+                          {repliedMessage && (
+                              <RepliedMessageSnippet 
+                                  message={repliedMessage} 
+                                  isOwn={isOwn} 
+                              />
+                          )}
+
+                          {message.content && <p className="text-base">{message.content}</p>}
+                          
+                          {message.media_url && (
+                            <div className="mt-2">
+                              {message.media_url.match(/\.(jpeg|jpg|png|gif|webp|svg)$/i) ? (
+                                <img src={message.media_url} alt="Media" className="rounded-lg max-h-64 object-cover w-full cursor-pointer" />
+                              ) : message.media_url.match(/\.(mp4|webm|ogg)$/i) ? (
+                                <video src={message.media_url} controls className="rounded-lg max-h-64 object-cover w-full" />
+                              ) : (
+                                <a href={message.media_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[rgb(var(--color-accent))] hover:underline">
+                                  <FileText size={16} /> {message.media_url.includes('http') ? 'View File/Link' : message.media_url}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          
+                        </div>
+                        {/* Message Timestamp and Date */}
+                        <div className={`flex flex-col text-xs text-[rgb(var(--color-text-secondary))] mt-1 ${isOwn ? 'items-end' : 'items-start'}`}>
+                            <span>{formatTime(message.created_at)}</span>
+                            <span className="text-[10px]">{formatDate(message.created_at)}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+              
+              {isOtherTyping && (
+                <div className="flex justify-start">
+                    <div className="flex items-center gap-2 max-w-xs">
+                        <div className="w-10 h-10 flex-shrink-0"></div> {/* Spacer for alignment */}
+                        <div className="p-3 rounded-xl bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text-secondary))] rounded-tl-none italic text-sm">
+                            {selectedUser.display_name} is typing...
+                        </div>
+                    </div>
                 </div>
               )}
 
               <div ref={messagesEndRef} />
             </div>
 
-            <form onSubmit={sendMessage} className="p-3 bg-[rgb(var(--color-surface))] border-t border-[rgb(var(--color-border))]">
-              {(file || remoteUrl) && (
-                <div className="mb-3 p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg flex items-center justify-between">
-                  <div className="flex-1 pr-2">
-                    {getPreview()}
+            {/* Message Input Form */}
+            <form onSubmit={handleSubmit} className="p-3 bg-[rgb(var(--color-surface))] border-t border-[rgb(var(--color-border))] w-full">
+              <input type="file" ref={fileInputRef} accept="image/*,video/*,.pdf,.doc,.docx,.txt" className="hidden" onChange={handleFileChange} />
+              
+              {/* Display replied message being composed */}
+              {replyingToMessage && (
+                  <div className="flex items-center p-2 mb-2 bg-[rgba(var(--color-primary), 0.1)] rounded-lg border-l-4 border-[rgb(var(--color-primary))] text-[rgb(var(--color-text-secondary))] text-sm">
+                      <CornerUpLeft size={16} className="mr-2 text-[rgb(var(--color-primary))]" />
+                      <div className="flex-1 truncate">
+                          Replying to: <span className="font-semibold">{replyingToMessage.profiles?.display_name || 'User'}</span> - {replyingToMessage.content || '[Media]'}
+                      </div>
+                      <button type="button" onClick={cancelReply} className="p-1 hover:bg-[rgba(var(--color-primary), 0.2)] rounded-full text-[rgb(var(--color-text))]">
+                          <X size={16} />
+                      </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFile(null);
-                      setRemoteUrl('');
-                    }}
-                    className="p-1 hover:bg-[rgb(var(--color-surface-hover))] rounded-full transition text-[rgb(var(--color-text))]"
-                  >
-                    <X size={18} />
+              )}
+
+              {/* Media Preview / URL Input */}
+              {(file || remoteUrl) && (
+                <div className="p-2 mb-2 bg-[rgb(var(--color-background))] border border-[rgb(var(--color-border))] rounded-lg flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-sm font-medium text-[rgb(var(--color-text))] truncate">
+                      {file ? file.name : (remoteUrl.length > 30 ? remoteUrl.substring(0, 30) + '...' : remoteUrl)}
+                    </span>
+                    {isUploading && (
+                      <span className="text-xs text-[rgb(var(--color-accent))]">
+                        ({uploadProgress.toFixed(0)}% uploaded)
+                      </span>
+                    )}
+                  </div>
+                  <button type="button" onClick={handleCancelMedia} className="p-1 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition">
+                    <X size={20} />
                   </button>
                 </div>
               )}
 
-              {isUploading && (
-                <div className="mb-3 w-full bg-[rgb(var(--color-border))] rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="bg-[rgba(var(--color-accent),1)] h-full transition-all duration-300"
-                    style={{ width: `${uploadProgress}%` }}
-                  />
-                </div>
-              )}
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*,.pdf,.doc,.docx,.txt"
-                onChange={(e) => {
-                  setFile(e.target.files?.[0] || null);
-                  setRemoteUrl('');
-                }}
-                className="hidden"
-              />
-
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition"
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className="p-2 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition" 
                   title="Attach file"
                 >
                   <Paperclip size={24} />
                 </button>
-
-                <div className="flex-1 flex items-center gap-1">
+                
+                {/* Conditional Input Field: Remote URL or Text Content */}
+                {(!file && !content && !remoteUrl) ? (
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <input
+                      type="url"
+                      placeholder="Paste media URL (Optional)..."
+                      value={remoteUrl}
+                      onChange={(e) => setRemoteUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border border-[rgb(var(--color-border))] rounded-full focus:outline-none focus:border-[rgb(var(--color-accent))] bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))] min-w-0"
+                    />
+                  </div>
+                ) : (
                   <input
-                    type="url"
-                    value={remoteUrl}
+                    type="text"
+                    placeholder="Type a message..."
+                    value={content}
                     onChange={(e) => {
-                      setRemoteUrl(e.target.value);
-                      setFile(null);
+                      setContent(e.target.value);
+                      handleTyping();
                     }}
-                    placeholder="Paste media URL..."
-                    className="flex-1 px-3 py-2 text-sm border border-[rgb(var(--color-border))] rounded-full focus:outline-none focus:border-[rgb(var(--color-accent))] bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))]"
+                    className="flex-1 px-4 py-2.5 border border-[rgb(var(--color-border))] rounded-full focus:outline-none focus:border-[rgb(var(--color-accent))] text-base bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))] min-w-0"
                   />
-                </div>
-
-                <input
-                  type="text"
-                  placeholder="Type a message..."
-                  value={content}
-                  onChange={handleInputChange}
-                  className="flex-1 px-4 py-2.5 border border-[rgb(var(--color-border))] rounded-full focus:outline-none focus:border-[rgb(var(--color-accent))] text-base bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))]"
-                />
+                )}
 
                 <button
                   type="submit"
@@ -537,7 +592,7 @@ export const Messages = () => {
       </div>
 
       {showSidebar && !selectedUser && (
-        <div onClick={() => setShowSidebar(false)} className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden" />
+        <div onClick={() => setShowSidebar(false)} className="fixed inset-0 bg-black/50 z-20 md:hidden"></div>
       )}
     </div>
   );
