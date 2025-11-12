@@ -533,7 +533,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
               <Trash2 size={24} className="text-red-500 flex-shrink-0" />
               <h3 className="font-bold text-xl">Confirm Deletion</h3>
             </div>
-            <p className="mb-6">Are you sure? This action **cannot be undone!**</p>
+            <p className="mb-6">Are you sure? This action cannot be undone!</p>
             
             <button
               onMouseDown={() => startDeleteHold(postToDelete)}
