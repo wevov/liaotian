@@ -1,8 +1,90 @@
 // src/components/Profile.tsx
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop } from 'lucide-react';
+
+// Define the type for the crop result, simplifying for this context
+type CropResult = {
+  blob: Blob;
+  fileName: string;
+  fileType: string;
+};
+
+// --- START: CROP UTILITY FUNCTIONS (In a real app, these would be in a separate utility file) ---
+
+/**
+ * Uses HTML Canvas to perform a center-crop on an image and returns the result as a Blob.
+ * @param imageFile The File object (image) to crop.
+ * @param type 'avatar' (1:1 aspect) or 'banner' (~2.5:1 aspect).
+ * @returns A Promise that resolves to the cropped Blob or null on failure.
+ */
+const getCroppedImageBlob = (imageFile: File, type: 'avatar' | 'banner'): Promise<Blob | null> => {
+  return new Promise((resolve) => {
+    const image = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          console.error("Canvas context not available.");
+          return resolve(null);
+        }
+
+        // Define target dimensions based on type (simulating standard sizes)
+        const targetWidth = type === 'avatar' ? 256 : 500;
+        const targetHeight = type === 'avatar' ? 256 : 200; // Aspect ratio of 2.5:1 for banner
+
+        // Set canvas dimensions
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        // Simple center-crop logic
+        const imageAspect = image.width / image.height;
+        const cropAspect = canvas.width / canvas.height;
+        let sx, sy, sWidth, sHeight;
+
+        if (imageAspect > cropAspect) {
+            // Image is wider than crop area (cut left/right)
+            sHeight = image.height;
+            sWidth = image.height * cropAspect;
+            sx = (image.width - sWidth) / 2;
+            sy = 0;
+        } else {
+            // Image is taller than crop area (cut top/bottom)
+            sWidth = image.width;
+            sHeight = image.width / cropAspect;
+            sx = 0;
+            sy = (image.height - sHeight) / 2;
+        }
+
+        // Draw the cropped section of the source image onto the canvas
+        // ctx.drawImage(image, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight);
+        ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+
+        // Convert canvas to Blob
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, imageFile.type, 0.95); // Quality 0.95
+
+      };
+      image.onerror = () => {
+        console.error("Error loading image for cropping.");
+        resolve(null);
+      };
+      image.src = e.target?.result as string;
+    };
+    reader.onerror = () => {
+      console.error("Error reading file for cropping.");
+      resolve(null);
+    };
+    reader.readAsDataURL(imageFile);
+  });
+};
+// --- END: CROP UTILITY FUNCTIONS ---
 
 export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; onMessage?: (profile: ProfileType) => void; onSettings?: () => void }) => {
   const [profile, setProfile] = useState<ProfileType | null>(null);
@@ -40,6 +122,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState('');
   const [showAvatarCropModal, setShowAvatarCropModal] = useState(false);
   const [showBannerCropModal, setShowBannerCropModal] = useState(false);
+  const [isCropping, setIsCropping] = useState(false); // To show loading state
 
   const openLightbox = (url: string, type: 'image' | 'video') => {
     setLightboxMediaUrl(url);
@@ -91,27 +174,41 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     }
   };
 
-  // SIMULATED CROP AND SAVE FUNCTION (This is where the actual upload happens after "cropping")
+  // ACTUAL CROP AND SAVE FUNCTION USING CANVAS LOGIC
   const handleCropAndSave = async (file: File, type: 'avatar' | 'banner') => {
     if (!file) return;
 
-    // In a real app, image manipulation/cropping logic would be here before upload
+    setIsCropping(true);
 
-    const result = await uploadMedia(file, 'profiles');
-    if (result) {
-      if (type === 'avatar') {
-        setAvatarUrl(result.url);
-        setShowAvatarCropModal(false);
-        setAvatarFileToCrop(null);
-        setAvatarPreviewUrl('');
-      } else {
-        setBannerUrl(result.url);
-        setShowBannerCropModal(false);
-        setBannerFileToCrop(null);
-        setBannerPreviewUrl('');
-      }
-    } else {
-        // Handle upload failure
+    try {
+        // 1. Perform client-side cropping using Canvas API
+        const croppedBlob = await getCroppedImageBlob(file, type);
+
+        if (!croppedBlob) {
+            console.error("Cropping failed, received null Blob.");
+            return;
+        }
+
+        // 2. Create a new File object from the Blob for upload
+        const croppedFile = new File([croppedBlob], `cropped-${file.name}`, { type: croppedBlob.type });
+
+        // 3. Upload the cropped file
+        const result = await uploadMedia(croppedFile, 'profiles');
+
+        if (result) {
+          if (type === 'avatar') {
+            setAvatarUrl(result.url);
+          } else {
+            setBannerUrl(result.url);
+          }
+        } else {
+            console.error("Media upload failed.");
+        }
+    } catch(e) {
+        console.error("An error occurred during crop or upload:", e);
+    } finally {
+        // 4. Cleanup states regardless of success/failure
+        setIsCropping(false);
         if (type === 'avatar') {
             setShowAvatarCropModal(false);
             setAvatarFileToCrop(null);
@@ -622,59 +719,104 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
 ))}
       </div>
 
-      {/* AVATAR CROP MODAL PLACEHOLDER */}
+      {/* AVATAR CROP MODAL (with actual cropping logic) */}
       {showAvatarCropModal && avatarFileToCrop && (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setShowAvatarCropModal(false)}>
+        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => !isCropping && setShowAvatarCropModal(false)}>
           <div className="bg-[rgb(var(--color-surface))] rounded-2xl w-full max-w-lg flex flex-col p-6 text-[rgb(var(--color-text))]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-xl flex items-center gap-2"><Crop size={20} /> Crop Avatar</h3>
-                <button onClick={() => setShowAvatarCropModal(false)} className="p-2 text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-hover))] rounded-full">
+                <button 
+                  onClick={() => setShowAvatarCropModal(false)} 
+                  className="p-2 text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-hover))] rounded-full"
+                  disabled={isCropping}
+                >
                     <X size={20} />
                 </button>
             </div>
-            <div className="flex justify-center items-center h-64 w-full bg-[rgb(var(--color-background))] rounded-lg overflow-hidden relative mb-4">
-                {/* Real-time preview of the image for cropping */}
-                <img src={avatarPreviewUrl} className="max-w-full max-h-full object-contain" alt="Avatar Crop Preview" />
-                {/* PLACEHOLDER FOR CROPPING UI */}
-                <div className="absolute inset-0 border-4 border-dashed border-white/50 pointer-events-none flex items-center justify-center">
-                    <span className="text-white/70 text-sm">Cropping Area Placeholder</span>
+            <div className="flex justify-center items-center h-80 w-full bg-[rgb(var(--color-background))] rounded-lg overflow-hidden relative mb-4">
+                {/* Image preview will show the entire image */}
+                <img 
+                  src={avatarPreviewUrl} 
+                  className="max-w-full max-h-full object-contain" 
+                  alt="Avatar Crop Preview" 
+                />
+                {/* Visual guide for the 1:1 square crop area */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-64 h-64 border-4 border-dashed border-white/80 rounded-full shadow-lg" />
+                    <div className="absolute inset-0 bg-black/50" 
+                      style={{ 
+                        clipPath: 'circle(128px at center)',
+                        mixBlendMode: 'saturation' // Darken/desaturate outside area
+                      }}
+                    />
+                    {isCropping && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-xl font-bold">
+                            Processing...
+                        </div>
+                    )}
                 </div>
             </div>
-            <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">Adjust the image to fit the desired square region. (Cropping functionality is simulated)</p>
+            <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">
+                The image will be center-cropped to a 1:1 (square) ratio for your avatar.
+            </p>
             <button
               onClick={() => handleCropAndSave(avatarFileToCrop, 'avatar')}
-              className="w-full py-3 bg-[rgba(var(--color-accent),1)] text-[rgb(var(--color-text-on-primary))] rounded-full font-semibold hover:bg-[rgba(var(--color-primary),1)] transition"
+              className="w-full py-3 bg-[rgba(var(--color-accent),1)] text-[rgb(var(--color-text-on-primary))] rounded-full font-semibold hover:bg-[rgba(var(--color-primary),1)] transition disabled:opacity-50"
+              disabled={isCropping}
             >
-              Crop & Save Avatar
+              {isCropping ? 'Cropping & Uploading...' : 'Crop & Save Avatar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* BANNER CROP MODAL PLACEHOLDER */}
+      {/* BANNER CROP MODAL (with actual cropping logic) */}
       {showBannerCropModal && bannerFileToCrop && (
-        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => setShowBannerCropModal(false)}>
+        <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4" onClick={() => !isCropping && setShowBannerCropModal(false)}>
           <div className="bg-[rgb(var(--color-surface))] rounded-2xl w-full max-w-2xl flex flex-col p-6 text-[rgb(var(--color-text))]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-xl flex items-center gap-2"><Crop size={20} /> Crop Banner</h3>
-                <button onClick={() => setShowBannerCropModal(false)} className="p-2 text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-hover))] rounded-full">
+                <button 
+                  onClick={() => setShowBannerCropModal(false)} 
+                  className="p-2 text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-surface-hover))] rounded-full"
+                  disabled={isCropping}
+                >
                     <X size={20} />
                 </button>
             </div>
             <div className="flex justify-center items-center h-48 w-full bg-[rgb(var(--color-background))] rounded-lg overflow-hidden relative mb-4">
-                {/* Real-time preview of the image for cropping */}
-                <img src={bannerPreviewUrl} className="w-full h-full object-cover" alt="Banner Crop Preview" />
-                {/* PLACEHOLDER FOR CROPPING UI */}
-                <div className="absolute inset-0 border-4 border-dashed border-white/50 pointer-events-none flex items-center justify-center">
-                    <span className="text-white/70 text-sm">Cropping Area Placeholder</span>
+                {/* Image preview will show the entire image */}
+                <img 
+                  src={bannerPreviewUrl} 
+                  className="w-full h-full object-cover" 
+                  alt="Banner Crop Preview" 
+                />
+                {/* Visual guide for the approx 2.5:1 banner crop area */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    {/* Simplified visual: a central box representing the 2.5:1 crop (e.g., 500x200) */}
+                    <div className="w-11/12 h-3/5 border-4 border-dashed border-white/80 shadow-lg" />
+                    <div className="absolute inset-0 bg-black/50" 
+                        style={{ 
+                            clipPath: 'polygon(0% 0%, 0% 100%, 5% 100%, 5% 20%, 95% 20%, 95% 80%, 5% 80%, 5% 100%, 100% 100%, 100% 0%)',
+                            mixBlendMode: 'saturation' // Darken/desaturate outside area
+                        }}
+                    />
+                    {isCropping && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white text-xl font-bold">
+                            Processing...
+                        </div>
+                    )}
                 </div>
             </div>
-            <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">Adjust the image to fit the desired wide region. (Cropping functionality is simulated)</p>
+            <p className="text-sm text-[rgb(var(--color-text-secondary))] mb-4">
+                The image will be center-cropped to a widescreen (approx. 2.5:1) ratio for your banner.
+            </p>
             <button
               onClick={() => handleCropAndSave(bannerFileToCrop, 'banner')}
-              className="w-full py-3 bg-[rgba(var(--color-accent),1)] text-[rgb(var(--color-text-on-primary))] rounded-full font-semibold hover:bg-[rgba(var(--color-primary),1)] transition"
+              className="w-full py-3 bg-[rgba(var(--color-accent),1)] text-[rgb(var(--color-text-on-primary))] rounded-full font-semibold hover:bg-[rgba(var(--color-primary),1)] transition disabled:opacity-50"
+              disabled={isCropping}
             >
-              Crop & Save Banner
+              {isCropping ? 'Cropping & Uploading...' : 'Crop & Save Banner'}
             </button>
           </div>
         </div>
