@@ -58,8 +58,6 @@ If you just want to create an account on **LiaoTian** (our official deployment) 
 - [ ] Messaging section soft errors (406, 4XX)
 - [ ] clicking on chat button couldn't utilize the url param for user to directly open conversation with someone
 - [ ] Mobile UI for Messages cuts off overflow from right side
-- [ ] Unimplemented theme tweaks for Messages, Profiles, Settings, Search
-- [ ] Custom pages (via react router) and `vercel.json` causing issues with loading assets sometimes
 
 ---
 
