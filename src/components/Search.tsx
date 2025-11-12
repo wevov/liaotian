@@ -161,7 +161,7 @@ export const Search = ({ onClose }: { onClose: () => void }) => {
 
               {!users.length && !posts.length && (
                 <div className="p-12 text-center text-[rgb(var(--color-text-secondary))]">
-                  No results found for **"{query}"**
+                  No results found for "{query}"
                 </div>
               )}
             </>
