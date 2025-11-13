@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { supabase, Message, Profile, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Send, BadgeCheck, Search, ArrowLeft, X, Paperclip, FileText, Link, CornerUpLeft, Phone, Video } from 'lucide-react';
-import { Calls } from './Calls'; // <--- ADDED
+import { Calls } from './Calls';
 
 // Define a type that includes the possible joined reply data
 type AppMessage = Message & {
@@ -11,7 +11,7 @@ type AppMessage = Message & {
     id: string;
     content: string;
     sender_id: string;
-    media_type?: string | null; // <--- MODIFICATION: Added media_type
+    media_type?: string | null;
   } | null;
 };
 
@@ -31,13 +31,12 @@ export const Messages = () => {
   const [showMediaMenu, setShowMediaMenu] = useState(false);
   const [mediaInputMode, setMediaInputMode] = useState<'file' | 'url' | null>(null);
   
-  // --- PAGINATION STATE START ---
+  // --- PAGINATION STATE ---
   const [messagePage, setMessagePage] = useState(0);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const MESSAGE_PAGE_SIZE = 10;
-  // --- PAGINATION STATE END ---
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -48,54 +47,42 @@ export const Messages = () => {
 
   const { user } = useAuth();
 
-  // --- ONLINE STATUS CHECKER ---
   const isUserOnline = (lastSeen: string | null | undefined): boolean => {
     if (!lastSeen) return false;
     const lastSeenDate = new Date(lastSeen);
     const now = new Date();
-    // Consider online if last_seen is within the last 5 minutes (300,000 ms)
     return (now.getTime() - lastSeenDate.getTime()) < 300000;
   };
-  // -----------------------------
 
-  // --- LAST SEEN FORMATTER MODIFICATION START ---
   const formatLastSeen = (lastSeen: string | null | undefined): string | null => {
     if (!lastSeen) return null;
 
     const lastSeenDate = new Date(lastSeen);
     const now = new Date();
     const diffMs = now.getTime() - lastSeenDate.getTime();
-
-    // Use the existing 5-minute rule for "online"
     const FIVE_MINUTES = 300000;
     if (diffMs < FIVE_MINUTES) return null;
 
     const diffSeconds = Math.floor(diffMs / 1000);
-    
     const days = Math.floor(diffSeconds / (60 * 60 * 24));
     const hours = Math.floor((diffSeconds % (60 * 60 * 24)) / (60 * 60));
     const minutes = Math.floor((diffSeconds % (60 * 60)) / 60);
 
     let parts = [];
     if (days > 0) {
-        // Show Days and the next most significant part (Hours)
         parts.push(`${days} day${days > 1 ? 's' : ''}`);
         if (hours > 0) parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
         else if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
     } else if (hours > 0) {
-        // Show Hours and Minutes
         parts.push(`${hours} hour${hours > 1 ? 's' : ''}`);
         if (minutes > 0) parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
     } else if (minutes > 0) {
-        // Show only Minutes
         parts.push(`${minutes} minute${minutes > 1 ? 's' : ''}`);
     }
 
     if (parts.length === 0) return null; 
-
     return `Last seen ${parts.join(' ')} ago`;
   };
-  // --- LAST SEEN FORMATTER MODIFICATION END ---
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -204,32 +191,26 @@ export const Messages = () => {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
-        async (payload) => { // Make async
+        async (payload) => {
           const msg = payload.new as AppMessage;
           if (
             (msg.sender_id === user!.id && msg.recipient_id === selectedUser.id) ||
             (msg.sender_id === selectedUser.id && msg.recipient_id === user!.id)
           ) {
-            
-            // --- MODIFICATION START ---
             let finalMsg = msg;
-            // If it's a reply, fetch the replied-to message details.
             if (finalMsg.reply_to_id) {
-              
               const { data: repliedToMsgData } = await supabase
                 .from('messages')
-                .select('id, content, sender_id, media_type') // <--- MODIFICATION: Added media_type
+                .select('id, content, sender_id, media_type')
                 .eq('id', finalMsg.reply_to_id)
                 .single();
               
               if (repliedToMsgData) {
-                // Manually assign the fetched reply data to the payload object
                 finalMsg = { ...finalMsg, reply_to: repliedToMsgData } as AppMessage; 
               }
             }
-            // --- MODIFICATION END ---
 
-            setMessages((prev) => [...prev, finalMsg]); // Add the potentially modified message
+            setMessages((prev) => [...prev, finalMsg]);
             scrollToBottom();
             loadConversations();
           }
@@ -351,24 +332,22 @@ export const Messages = () => {
     }
   };
 
-  // --- PAGINATION: MODIFIED loadMessages ---
   const loadMessages = async (recipientId: string) => {
-    setMessages([]); // Clear previous chat
-    setMessagePage(0); // Reset page
-    setHasMoreMessages(true); // Assume there are more
-    setIsLoadingMore(false); // Reset loading state
+    setMessages([]); 
+    setMessagePage(0); 
+    setHasMoreMessages(true); 
+    setIsLoadingMore(false); 
     
     const { data, count } = await supabase
       .from('messages')
-      // --- FIX: Ensure media_type is selected in the join for reply_to messages ---
       .select('*, reply_to:messages!reply_to_id(id, content, sender_id, media_type)', { count: 'exact' })
       .or(
         `and(sender_id.eq.${user!.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user!.id})`
       )
-      .order('created_at', { ascending: false }) // Get newest first
-      .range(0, MESSAGE_PAGE_SIZE - 1); // Get page 0 (0-9)
+      .order('created_at', { ascending: false })
+      .range(0, MESSAGE_PAGE_SIZE - 1); 
       
-    setMessages(data ? (data as AppMessage[]).reverse() : []); // Reverse to show oldest first
+    setMessages(data ? (data as AppMessage[]).reverse() : []); 
     
     if (!data || data.length < MESSAGE_PAGE_SIZE || (count !== null && count <= MESSAGE_PAGE_SIZE)) {
       setHasMoreMessages(false);
@@ -377,7 +356,6 @@ export const Messages = () => {
     setTimeout(scrollToBottom, 100);
   };
 
-  // --- PAGINATION: NEW loadMoreMessages ---
   const loadMoreMessages = async () => {
     if (isLoadingMore || !hasMoreMessages || !selectedUser) return;
   
@@ -399,15 +377,14 @@ export const Messages = () => {
       .range(from, to);
   
     if (data && data.length > 0) {
-      setMessages(prev => [...(data as AppMessage[]).reverse(), ...prev]); // Prepend older messages
+      setMessages(prev => [...(data as AppMessage[]).reverse(), ...prev]);
       setMessagePage(nextPage);
       
-      // Restore scroll position
       if (container && oldScrollHeight) {
         setTimeout(() => {
           const newScrollHeight = container.scrollHeight;
           container.scrollTop = newScrollHeight - oldScrollHeight;
-        }, 0); // Wait for DOM to update
+        }, 0);
       }
     }
   
@@ -418,18 +395,15 @@ export const Messages = () => {
     setIsLoadingMore(false);
   };
   
-  // --- PAGINATION: NEW handleScroll ---
   const handleScroll = () => {
     if (messagesContainerRef.current) {
       const { scrollTop } = messagesContainerRef.current;
-      // Scrolled to top
       if (scrollTop === 0 && hasMoreMessages && !isLoadingMore) {
         loadMoreMessages();
       }
     }
   };
 
-  // --- CALLS: NEW dispatchStartCall ---
   const dispatchStartCall = (targetUser: Profile, type: 'audio' | 'video') => {
     window.dispatchEvent(new CustomEvent('startCall', { 
       detail: { targetUser, type }
@@ -474,7 +448,7 @@ export const Messages = () => {
 
   return (
     <div className="flex h-screen mb-[-40] bg-[rgb(var(--color-background))] overflow-hidden">
-      <Calls /> {/* <-- ADDED CALLS COMPONENT */}
+      <Calls />
       <div className={`w-full md:w-96 bg-[rgb(var(--color-surface))] border-r border-[rgb(var(--color-border))] flex-shrink-0 flex flex-col transition-transform duration-300 ease-in-out ${showSidebar ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} md:relative fixed inset-y-0 left-0 z-40 md:z-auto`}>
         <div className="p-4 border-b border-[rgb(var(--color-border))] sticky top-0 bg-[rgb(var(--color-surface))] z-10">
           <h2 className="text-3xl font-extrabold text-[rgb(var(--color-text))] mb-4">Chats</h2>
@@ -524,7 +498,6 @@ export const Messages = () => {
                   {u.display_name}
                   {u.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))] flex-shrink-0" />}
                 </div>
-                {/* MODIFICATION: Display online status or last seen time in place of @username */}
                 <div className="text-sm text-[rgb(var(--color-text-secondary))] truncate">
                   {isUserOnline(u.last_seen)
                     ? 'Online'
@@ -562,7 +535,6 @@ export const Messages = () => {
                     {selectedUser.display_name}
                     {selectedUser.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))] flex-shrink-0" />}
                   </div>
-                  {/* MODIFICATION: Display online status or last seen time in place of @username */}
                   <div className="text-sm text-[rgb(var(--color-text-secondary))] truncate">
                     {isUserOnline(selectedUser.last_seen)
                       ? 'Online'
@@ -572,7 +544,6 @@ export const Messages = () => {
                 </div>
               </button>
               
-              {/* --- CALL BUTTONS START --- */}
               <div className="flex gap-1 pr-1">
                 <button
                   onClick={() => dispatchStartCall(selectedUser, 'audio')}
@@ -589,7 +560,6 @@ export const Messages = () => {
                   <Video size={20} />
                 </button>
               </div>
-              {/* --- CALL BUTTONS END --- */}
             </div>
 
             <div 
@@ -597,7 +567,6 @@ export const Messages = () => {
               onScroll={handleScroll}
               className="flex-1 overflow-y-auto p-4 space-y-4 bg-[rgb(var(--color-background))]"
             >
-              {/* --- PAGINATION: LOADING SPINNER --- */}
               {isLoadingMore && (
                 <div className="flex justify-center p-4">
                   <div className="w-6 h-6 border-2 border-[rgb(var(--color-accent))] border-t-transparent rounded-full animate-spin"></div>
@@ -609,7 +578,6 @@ export const Messages = () => {
                   key={msg.id}
                   className={`flex items-center gap-2 group ${msg.sender_id === user!.id ? 'justify-end' : 'justify-start'}`}
                 >
-                  {/* Show reply icon on the left for sent messages */}
                   {msg.sender_id === user!.id && (
                     <button
                       onClick={() => setReplyingTo(msg)}
@@ -627,26 +595,16 @@ export const Messages = () => {
                         : 'bg-[rgb(var(--color-surface))] text-[rgb(var(--color-text))] border border-[rgb(var(--color-border))] rounded-tl-none'
                     }`}
                   >
-                    {/* --- MODIFICATION START --- */}
-                    {/* Only render this block if reply_to_id exists (this handles the null check) */}
                     {msg.reply_to_id && (() => {
-                      // Find the replied-to message. Use joined data first, fallback to in-memory search.
-                      // This ensures that after a refresh (joined data present) or a new message 
-                      // (subscription-fetched data present) or a very recent message 
-                      // (in-memory search possible), the content is available.
                       const repliedToMsg = msg.reply_to ? msg.reply_to : messages.find(m => m.id === msg.reply_to_id);
-                      
-                      // The message won't render the reply block if repliedToMsg is null, 
-                      // which covers the case where reply_to_id is present but the message details aren't found.
                       if (!repliedToMsg) return null;
-                      
                       const isReplyToSelf = repliedToMsg.sender_id === user!.id;
                       
                       return (
                         <div className={`p-2 rounded-lg mb-2 ${
                           msg.sender_id === user!.id
-                            ? 'bg-[rgba(var(--color-surface),0.2)]' // Different color for self-reply
-                            : 'bg-[rgb(var(--color-surface-hover))]' // Different color for other-reply
+                            ? 'bg-[rgba(var(--color-surface),0.2)]' 
+                            : 'bg-[rgb(var(--color-surface-hover))]' 
                         }`}>
                           <div className={`font-bold text-xs mb-0.5 ${
                             msg.sender_id === user!.id 
@@ -655,7 +613,6 @@ export const Messages = () => {
                           }`}>
                             {isReplyToSelf ? 'You' : selectedUser?.display_name}
                           </div>
-                          {/* MODIFICATION: Show text or media placeholder */}
                           <p className="text-xs opacity-90 truncate whitespace-pre-wrap break-words">
                             {repliedToMsg.content ? repliedToMsg.content : (
                               <span className="flex items-center gap-1 italic opacity-80">
@@ -665,7 +622,6 @@ export const Messages = () => {
                                 {repliedToMsg.media_type === 'video' && 'Video'}
                                 {repliedToMsg.media_type === 'document' && <FileText size={12} className="inline-block" />}
                                 {repliedToMsg.media_type === 'document' && 'File'}
-                                {/* Fallback if RLS hides content/media but not sender */}
                                 {!repliedToMsg.content && !repliedToMsg.media_type && '[Message]'}
                               </span>
                             )}
@@ -673,7 +629,6 @@ export const Messages = () => {
                         </div>
                       );
                     })()}
-                    {/* --- MODIFICATION END --- */}
 
                     {msg.media_url && (
                       <div className="mt-2">
@@ -712,7 +667,6 @@ export const Messages = () => {
                     </span>
                   </div>
 
-                  {/* Show reply icon on the right for received messages */}
                   {msg.sender_id !== user!.id && (
                     <button
                       onClick={() => setReplyingTo(msg)}
@@ -748,7 +702,6 @@ export const Messages = () => {
                       <CornerUpLeft size={14} />
                       Replying to {replyingTo.sender_id === user!.id ? 'yourself' : selectedUser?.display_name}
                     </div>
-                    {/* --- MODIFICATION: Show text or media placeholder --- */}
                     <p className="text-sm text-[rgb(var(--color-text))] truncate mt-0.5">
                       {replyingTo.content ? replyingTo.content : (
                         <span className="flex items-center gap-1 italic opacity-80">
@@ -762,7 +715,6 @@ export const Messages = () => {
                         </span>
                       )}
                     </p>
-                    {/* --- END MODIFICATION --- */}
                   </div>
                   <button
                     type="button"
@@ -843,7 +795,6 @@ export const Messages = () => {
                 className="hidden"
               />
 
-              {/* Media Selection Pop-up */}
               {showMediaMenu && (
                   <div className="absolute bottom-full left-3 mb-2 w-48 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-xl overflow-hidden z-30">
                       <button
