@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send } from 'lucide-react';
+import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send, Image, Grid, ThumbsUp } from 'lucide-react';
 
 // Define the type for the crop result, simplifying for this context
 type CropResult = {
@@ -180,6 +180,13 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
   const [commentsList, setCommentsList] = useState<Comment[]>([]);
   const [newCommentText, setNewCommentText] = useState('');
   const [isPostingComment, setIsPostingComment] = useState(false);
+  
+  // --- TABS STATE START ---
+  const [activeTab, setActiveTab] = useState<'posts' | 'media' | 'likes'>('posts');
+  const [likedPosts, setLikedPosts] = useState<Post[]>([]);
+  const [isLoadingLikes, setIsLoadingLikes] = useState(false);
+  const [isLikesLoaded, setIsLikesLoaded] = useState(false);
+  // --- TABS STATE END ---
 
   const openLightbox = (url: string, type: 'image' | 'video') => {
     setLightboxMediaUrl(url);
@@ -331,7 +338,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
   /**
    * Social Functions (Copied/Adapted from Feed.tsx)
    */
-  const fetchUserLikes = async (currentPosts: Post[]) => {
+  const fetchUserLikes = useCallback(async (currentPosts: Post[]) => {
     if (!user || currentPosts.length === 0) return;
     const postIds = currentPosts.map(p => p.id);
     const { data } = await supabase
@@ -348,7 +355,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
         return newSet;
       });
     }
-  };
+  }, [user]); // Added user dependency
 
   const handleToggleLike = async (post: Post) => {
     if (!user) return;
@@ -360,7 +367,16 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     else newSet.add(post.id);
     setLikedPostIds(newSet);
 
+    // Update the 'posts' list
     setPosts(current => current.map(p => {
+      if (p.id === post.id) {
+        return { ...p, like_count: isLiked ? (p.like_count - 1) : (p.like_count + 1) };
+      }
+      return p;
+    }));
+    
+    // Also update the 'likedPosts' list
+    setLikedPosts(current => current.map(p => {
       if (p.id === post.id) {
         return { ...p, like_count: isLiked ? (p.like_count - 1) : (p.like_count + 1) };
       }
@@ -420,6 +436,11 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
         if (p.id === postId) return { ...p, comment_count: (p.comment_count || 0) + 1 };
         return p;
       }));
+      // Also update the 'likedPosts' list
+      setLikedPosts(current => current.map(p => {
+        if (p.id === postId) return { ...p, comment_count: (p.comment_count || 0) + 1 };
+        return p;
+      }));
     }
     setIsPostingComment(false);
   };
@@ -428,16 +449,8 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
    */
 
 
-  useEffect(() => {
-    if (targetUserId) {
-      loadProfile();
-      loadPosts();
-      loadFollowStats();
-      if (!isOwnProfile && user) checkFollowing();
-    }
-  }, [targetUserId, user]);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
+    if (!targetUserId) return;
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -451,9 +464,10 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
       setAvatarUrl(data.avatar_url || '');
       setBannerUrl(data.banner_url || '');
     }
-  };
+  }, [targetUserId]);
 
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async () => {
+    if (!targetUserId) return;
     const { data } = await supabase
       .from('posts')
       .select('*, profiles(*)')
@@ -462,9 +476,48 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     const loadedPosts = data || [];
     setPosts(loadedPosts);
     fetchUserLikes(loadedPosts); // NEW: Fetch likes for loaded posts
-  };
+  }, [targetUserId, fetchUserLikes]);
+  
+  // --- NEW: Load Liked Posts ---
+  const loadLikedPosts = useCallback(async () => {
+    if (!targetUserId) return;
+    
+    setIsLoadingLikes(true);
+    
+    // 1. Find all post IDs this user has liked
+    const { data: likeData } = await supabase
+      .from('likes')
+      .select('entity_id')
+      .eq('user_id', targetUserId)
+      .eq('entity_type', 'post');
+      
+    if (!likeData || likeData.length === 0) {
+      setLikedPosts([]);
+      setIsLikesLoaded(true);
+      setIsLoadingLikes(false);
+      return;
+    }
+    
+    // 2. Fetch all posts matching those IDs
+    const postIds = likeData.map(l => l.entity_id);
+    const { data: postData } = await supabase
+      .from('posts')
+      .select('*, profiles(*)')
+      .in('id', postIds)
+      .order('created_at', { ascending: false });
+      
+    const loadedLikedPosts = postData || [];
+    setLikedPosts(loadedLikedPosts);
+    
+    // 3. Fetch *our* (the viewing user's) likes for *these* posts
+    fetchUserLikes(loadedLikedPosts);
+    
+    setIsLikesLoaded(true);
+    setIsLoadingLikes(false);
+  }, [targetUserId, fetchUserLikes]);
 
-  const loadFollowStats = async () => {
+  const loadFollowStats = useCallback(async () => {
+    if (!targetUserId) return;
     const { count: followers } = await supabase
       .from('follows')
       .select('*', { count: 'exact', head: true })
@@ -477,10 +530,10 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
 
     setFollowerCount(followers || 0);
     setFollowingCount(followingC || 0);
-  };
+  }, [targetUserId]);
 
-  const checkFollowing = async () => {
-    if (!user) return;
+  const checkFollowing = useCallback(async () => {
+    if (!user || !targetUserId) return;
     const { data } = await supabase
       .from('follows')
       .select('follower_id')
@@ -488,7 +541,21 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
       .eq('following_id', targetUserId)
       .maybeSingle();
     setIsFollowing(!!data);
-  };
+  }, [user, targetUserId]);
+
+  useEffect(() => {
+    if (targetUserId) {
+      // Reset tab-specific data on profile change
+      setActiveTab('posts');
+      setIsLikesLoaded(false);
+      setLikedPosts([]);
+      
+      loadProfile();
+      loadPosts();
+      loadFollowStats();
+      if (!isOwnProfile) checkFollowing();
+    }
+  }, [targetUserId, isOwnProfile, loadProfile, loadPosts, loadFollowStats, checkFollowing]);
 
   const loadFollowers = async () => {
     const { data } = await supabase
@@ -644,6 +711,19 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
       window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
     }
   };
+  
+  // --- NEW: Handle Tab Click ---
+  const handleTabClick = (tab: 'posts' | 'media' | 'likes') => {
+    setActiveTab(tab);
+    if (tab === 'likes' && !isLikesLoaded && !isLoadingLikes) {
+      loadLikedPosts();
+    }
+  };
+  
+  // --- NEW: Memoize Media Posts ---
+  const mediaPosts = useCallback(() => {
+    return posts.filter(p => p.media_url && (p.media_type === 'image' || p.media_type === 'video'));
+  }, [posts])();
 
   if (!profile) return <div className="text-center p-8 text-[rgb(var(--color-text))]">Loading...</div>;
 
@@ -852,139 +932,361 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
           )}
         </div>
       </div>
+      
+      {/* --- TABS START --- */}
+      <div className="flex border-b border-[rgb(var(--color-border))] bg-[rgb(var(--color-surface))] sticky top-0 z-30">
+        <button 
+          onClick={() => handleTabClick('posts')}
+          className={`flex-1 py-4 font-semibold flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'posts' 
+            ? 'text-[rgb(var(--color-accent))] border-b-2 border-[rgb(var(--color-accent))]' 
+            : 'text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]'
+          }`}
+        >
+          <Grid size={18} />
+          Posts
+        </button>
+        <button 
+          onClick={() => handleTabClick('media')}
+          className={`flex-1 py-4 font-semibold flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'media' 
+            ? 'text-[rgb(var(--color-accent))] border-b-2 border-[rgb(var(--color-accent))]' 
+            : 'text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]'
+          }`}
+        >
+          <Image size={18} />
+          Media
+        </button>
+        <button 
+          onClick={() => handleTabClick('likes')}
+          className={`flex-1 py-4 font-semibold flex items-center justify-center gap-2 transition-colors ${
+            activeTab === 'likes' 
+            ? 'text-[rgb(var(--color-accent))] border-b-2 border-[rgb(var(--color-accent))]' 
+            : 'text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]'
+          }`}
+        >
+          <ThumbsUp size={18} />
+          Likes
+        </button>
+      </div>
+      {/* --- TABS END --- */}
 
       <div>
-        {posts.map((post) => (
-  <div key={post.id} className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]">
-    <div className="flex gap-4 items-start">
-      <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0 relative">
-        <img
-          src={post.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.profiles?.username}`}
-          className="w-12 h-12 rounded-full hover:opacity-80 transition"
-          alt="Avatar"
-        />
-        {isOnline(post.profiles?.last_seen) && (
-          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[rgb(var(--color-surface))] rounded-full" />
+        {/* --- POSTS TAB CONTENT --- */}
+        {activeTab === 'posts' && (
+          <div>
+            {posts.length === 0 && (
+              <div className="text-center p-8 text-[rgb(var(--color-text-secondary))]">This user hasn't posted anything yet.</div>
+            )}
+            {posts.map((post) => (
+              <div key={post.id} className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]">
+                <div className="flex gap-4 items-start">
+                  <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0 relative">
+                    <img
+                      src={post.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.profiles?.username}`}
+                      className="w-12 h-12 rounded-full hover:opacity-80 transition"
+                      alt="Avatar"
+                    />
+                    {isOnline(post.profiles?.last_seen) && (
+                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[rgb(var(--color-surface))] rounded-full" />
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button onClick={() => goToProfile(post.user_id)} className="font-bold text-[rgb(var(--color-text))] hover:underline">
+                        {post.profiles?.display_name}
+                      </button>
+                      {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
+                      <span className="text-[rgb(var(--color-text-secondary))] text-sm">@{post.profiles?.username}</span>
+                      <span className="text-[rgb(var(--color-text-secondary))] text-sm">
+                        · {new Date(post.created_at).toLocaleDateString()} at {formatTime(post.created_at)}
+                      </span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-[rgb(var(--color-text))]">{post.content}</p>
+                    {post.media_url && (
+                              <div className="mt-3">
+                                {post.media_type === 'image' && (
+                                  <img 
+                                    src={post.media_url} 
+                                    className="rounded-2xl max-h-96 object-cover w-full cursor-pointer transition hover:opacity-90" 
+                                    alt="Post" 
+                                    onClick={() => openLightbox(post.media_url, 'image')}
+                                  />
+                                )}
+                                {post.media_type === 'video' && (
+                                  <video controls className="rounded-2xl max-h-96 w-full">
+                                    <source src={post.media_url} />
+                                    Your browser does not support the video tag.
+                                  </video>
+                                )}
+                                {post.media_type === 'document' && (
+                                  <a
+                                    href={post.media_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))] transition inline-block"
+                                  >
+                                    <FileText size={20} /> Download File
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                    
+                    {/* NEW: Action Bar (Likes and Comments) */}
+                    <div className="flex items-center gap-6 mt-3">
+                        <div className="flex items-center gap-1 group">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleToggleLike(post); }}
+                            className={`p-2 rounded-full transition ${
+                              likedPostIds.has(post.id) 
+                                ? 'text-pink-500 bg-pink-500/10' 
+                                : 'text-[rgb(var(--color-text-secondary))] hover:bg-pink-500/10 hover:text-pink-500'
+                            }`}
+                          >
+                            <Heart size={18} fill={likedPostIds.has(post.id) ? "currentColor" : "none"} />
+                          </button>
+                          {/* Counts are visible unless 0 or null */}
+                          {(post.like_count > 0) && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); openLikesList(post.id); }}
+                              className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
+                            >
+                              {post.like_count}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 group">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
+                            className="p-2 rounded-full transition text-[rgb(var(--color-text-secondary))] hover:bg-blue-500/10 hover:text-blue-500"
+                          >
+                            <MessageCircle size={18} />
+                          </button>
+                            {/* Counts are visible unless 0 or null */}
+                          {(post.comment_count > 0) && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
+                              className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
+                            >
+                              {post.comment_count}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                  </div>
+
+                {isOwnProfile && (
+                    <div className="relative flex-shrink-0">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === post.id ? null : post.id);
+                            }}
+                            className="p-1 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
+                        {openMenuId === post.id && (
+                            <div 
+                                className="absolute right-0 mt-2 w-48 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-xl overflow-hidden z-10"
+                                onMouseLeave={() => setOpenMenuId(null)}
+                            >
+                                <button
+                                    onClick={() => {
+                                        setPostToDelete(post);
+                                        setShowDeleteModal(true);
+                                        setOpenMenuId(null);
+                                    }}
+                                    className="w-full text-left p-3 text-red-500 hover:bg-red-50 transition flex items-center gap-2"
+                                >
+                                    <Trash2 size={18} /> Delete Post
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-      </button>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <button onClick={() => goToProfile(post.user_id)} className="font-bold text-[rgb(var(--color-text))] hover:underline">
-            {post.profiles?.display_name}
-          </button>
-          {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
-          <span className="text-[rgb(var(--color-text-secondary))] text-sm">@{post.profiles?.username}</span>
-          <span className="text-[rgb(var(--color-text-secondary))] text-sm">
-            · {new Date(post.created_at).toLocaleDateString()} at {formatTime(post.created_at)}
-          </span>
-        </div>
-        <p className="mt-1 whitespace-pre-wrap break-words text-[rgb(var(--color-text))]">{post.content}</p>
-        {post.media_url && (
-                  <div className="mt-3">
+        
+        {/* --- MEDIA TAB CONTENT --- */}
+        {activeTab === 'media' && (
+          <div>
+            {mediaPosts.length === 0 ? (
+              <div className="text-center p-8 text-[rgb(var(--color-text-secondary))]">This user hasn't posted any media.</div>
+            ) : (
+              <div className="grid grid-cols-3 gap-1">
+                {mediaPosts.map((post) => (
+                  <button 
+                    key={post.id} 
+                    className="aspect-square relative bg-[rgb(var(--color-border))] hover:opacity-80 transition"
+                    onClick={() => openLightbox(post.media_url, post.media_type === 'video' ? 'video' : 'image')}
+                  >
                     {post.media_type === 'image' && (
-                      <img 
-                        src={post.media_url} 
-                        className="rounded-2xl max-h-96 object-cover w-full cursor-pointer transition hover:opacity-90" 
-                        alt="Post" 
-                        onClick={() => openLightbox(post.media_url, 'image')}
-                      />
+                      <img src={post.media_url} alt="Media" className="w-full h-full object-cover" />
                     )}
                     {post.media_type === 'video' && (
-                      <video controls className="rounded-2xl max-h-96 w-full">
-                        <source src={post.media_url} />
-                        Your browser does not support the video tag.
-                      </video>
+                      <>
+                        <video src={post.media_url} className="w-full h-full object-cover" />
+                        <div className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full">
+                          <Camera size={16} className="text-white" />
+                        </div>
+                      </>
                     )}
-                    {post.media_type === 'document' && (
-                      <a
-                        href={post.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))] transition inline-block"
-                      >
-                        <FileText size={20} /> Download File
-                      </a>
-                    )}
-                  </div>
-                )}
-        
-        {/* NEW: Action Bar (Likes and Comments) */}
-        <div className="flex items-center gap-6 mt-3">
-            <div className="flex items-center gap-1 group">
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleToggleLike(post); }}
-                className={`p-2 rounded-full transition ${
-                  likedPostIds.has(post.id) 
-                    ? 'text-pink-500 bg-pink-500/10' 
-                    : 'text-[rgb(var(--color-text-secondary))] hover:bg-pink-500/10 hover:text-pink-500'
-                }`}
-              >
-                <Heart size={18} fill={likedPostIds.has(post.id) ? "currentColor" : "none"} />
-              </button>
-              {/* Counts are visible unless 0 or null */}
-              {(post.like_count > 0) && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); openLikesList(post.id); }}
-                  className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
-                >
-                  {post.like_count}
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1 group">
-              <button 
-                onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
-                className="p-2 rounded-full transition text-[rgb(var(--color-text-secondary))] hover:bg-blue-500/10 hover:text-blue-500"
-              >
-                <MessageCircle size={18} />
-              </button>
-                {/* Counts are visible unless 0 or null */}
-              {(post.comment_count > 0) && (
-                <button 
-                  onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
-                  className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
-                >
-                  {post.comment_count}
-                </button>
-              )}
-            </div>
-          </div>
-      </div>
-
-    {isOwnProfile && (
-        <div className="relative flex-shrink-0">
-            <button
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setOpenMenuId(openMenuId === post.id ? null : post.id);
-                }}
-                className="p-1 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition"
-            >
-                <MoreVertical size={20} />
-            </button>
-            {openMenuId === post.id && (
-                <div 
-                    className="absolute right-0 mt-2 w-48 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-xl overflow-hidden z-10"
-                    onMouseLeave={() => setOpenMenuId(null)}
-                >
-                    <button
-                        onClick={() => {
-                            setPostToDelete(post);
-                            setShowDeleteModal(true);
-                            setOpenMenuId(null);
-                        }}
-                        className="w-full text-left p-3 text-red-500 hover:bg-red-50 transition flex items-center gap-2"
-                    >
-                        <Trash2 size={18} /> Delete Post
-                    </button>
-                </div>
+                  </button>
+                ))}
+              </div>
             )}
-        </div>
-    )}
-    </div>
-  </div>
-))}
+          </div>
+        )}
+        
+        {/* --- LIKES TAB CONTENT --- */}
+        {activeTab === 'likes' && (
+          <div>
+            {isLoadingLikes && (
+              <div className="flex justify-center p-8">
+                <div className="w-8 h-8 border-4 border-[rgb(var(--color-accent))] border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
+            
+            {!isLoadingLikes && isLikesLoaded && likedPosts.length === 0 && (
+              <div className="text-center p-8 text-[rgb(var(--color-text-secondary))]">This user hasn't liked any posts yet.</div>
+            )}
+            
+            {!isLoadingLikes && isLikesLoaded && likedPosts.map((post) => (
+              <div key={post.id} className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]">
+                <div className="flex gap-4 items-start">
+                  <button onClick={() => goToProfile(post.user_id)} className="flex-shrink-0 relative">
+                    <img
+                      src={post.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.profiles?.username}`}
+                      className="w-12 h-12 rounded-full hover:opacity-80 transition"
+                      alt="Avatar"
+                    />
+                    {isOnline(post.profiles?.last_seen) && (
+                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[rgb(var(--color-surface))] rounded-full" />
+                    )}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <button onClick={() => goToProfile(post.user_id)} className="font-bold text-[rgb(var(--color-text))] hover:underline">
+                        {post.profiles?.display_name}
+                      </button>
+                      {post.profiles?.verified && <BadgeCheck size={16} className="text-[rgb(var(--color-accent))]" />}
+                      <span className="text-[rgb(var(--color-text-secondary))] text-sm">@{post.profiles?.username}</span>
+                      <span className="text-[rgb(var(--color-text-secondary))] text-sm">
+                        · {new Date(post.created_at).toLocaleDateString()} at {formatTime(post.created_at)}
+                      </span>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap break-words text-[rgb(var(--color-text))]">{post.content}</p>
+                    {post.media_url && (
+                              <div className="mt-3">
+                                {post.media_type === 'image' && (
+                                  <img 
+                                    src={post.media_url} 
+                                    className="rounded-2xl max-h-96 object-cover w-full cursor-pointer transition hover:opacity-90" 
+                                    alt="Post" 
+                                    onClick={() => openLightbox(post.media_url, 'image')}
+                                  />
+                                )}
+                                {post.media_type === 'video' && (
+                                  <video controls className="rounded-2xl max-h-96 w-full">
+                                    <source src={post.media_url} />
+                                    Your browser does not support the video tag.
+                                  </video>
+                                )}
+                                {post.media_type === 'document' && (
+                                  <a
+                                    href={post.media_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))] transition inline-block"
+                                  >
+                                    <FileText size={20} /> Download File
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                    
+                    <div className="flex items-center gap-6 mt-3">
+                        <div className="flex items-center gap-1 group">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleToggleLike(post); }}
+                            className={`p-2 rounded-full transition ${
+                              likedPostIds.has(post.id) 
+                                ? 'text-pink-500 bg-pink-500/10' 
+                                : 'text-[rgb(var(--color-text-secondary))] hover:bg-pink-500/10 hover:text-pink-500'
+                            }`}
+                          >
+                            <Heart size={18} fill={likedPostIds.has(post.id) ? "currentColor" : "none"} />
+                          </button>
+                          {(post.like_count > 0) && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); openLikesList(post.id); }}
+                              className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
+                            >
+                              {post.like_count}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 group">
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
+                            className="p-2 rounded-full transition text-[rgb(var(--color-text-secondary))] hover:bg-blue-500/10 hover:text-blue-500"
+                          >
+                            <MessageCircle size={18} />
+                          </button>
+                          {(post.comment_count > 0) && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); openCommentsList(post.id); }}
+                              className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline"
+                            >
+                              {post.comment_count}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                  </div>
+
+                {/* No delete button for liked posts (unless it's our own post) */}
+                {isOwnProfile && post.user_id === user?.id && (
+                    <div className="relative flex-shrink-0">
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === post.id ? null : post.id);
+                            }}
+                            className="p-1 rounded-full text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] transition"
+                        >
+                            <MoreVertical size={20} />
+                        </button>
+                        {openMenuId === post.id && (
+                            <div 
+                                className="absolute right-0 mt-2 w-48 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded-lg shadow-xl overflow-hidden z-10"
+                                onMouseLeave={() => setOpenMenuId(null)}
+                            >
+                                <button
+                                    onClick={() => {
+                                        setPostToDelete(post);
+                                        setShowDeleteModal(true);
+                                        setOpenMenuId(null);
+                                    }}
+                                    className="w-full text-left p-3 text-red-500 hover:bg-red-50 transition flex items-center gap-2"
+                                >
+                                    <Trash2 size={18} /> Delete Post
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* AVATAR CROP MODAL (with actual cropping logic and zoom simulation) */}
