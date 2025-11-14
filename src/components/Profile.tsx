@@ -235,7 +235,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
    * Helper function to handle direct upload of files (like GIFs) that don't need cropping.
    */
   const handleDirectUpload = async (file: File, type: 'avatar' | 'banner') => {
-    setIsCropping(true); 
+    setIsCropping(false); // temporarily disable due to errors
     try {
         const result = await uploadMedia(file, 'profiles');
         if (result) {
@@ -459,7 +459,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     if (data) {
       setDisplayName(data.display_name);
       setBio(data.bio || '');
-      setBioLink(data.bio_link || ''); // NEW
+      setBioLink(data.bio_link || '');
       setAvatarUrl(data.avatar_url || '');
       setBannerUrl(data.banner_url || '');
     }
