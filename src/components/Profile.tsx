@@ -46,16 +46,23 @@ interface Liker {
  * @returns A Promise that resolves to the cropped Blob or null on failure.
  */
 const getCroppedImageBlob = (imageFile: File, type: 'avatar' | 'banner', scale: number): Promise<Blob | null> => {
+  // NEW: Validate scale early (prevent Inf/NaN from bad state)
+  if (!isFinite(scale) || scale <= 0) {
+    console.error('Invalid scale:', scale);
+    alert('Invalid zoom level. Please try again.');
+    return Promise.resolve(null);
+  }
+
   return new Promise((resolve) => {
     const image = new Image();
     const reader = new FileReader();
 
     reader.onload = (e) => {
       image.onload = () => {
-        // NEW: Check for valid image dimensions (handles corrupted/broken images)
+        // NEW: Check for valid image dimensions (handles corrupted/broken images or load failures)
         if (image.naturalWidth === 0 || image.naturalHeight === 0) {
-          console.error("Invalid image: Zero dimensions detected (possibly corrupted or wrong format).");
-          alert("Invalid image file. Please select a valid image.");
+          console.error("Invalid image: Zero dimensions detected (possibly corrupted or wrong format). File:", imageFile.name);
+          alert("Invalid image file. Please select a valid image (e.g., JPG, PNG).");
           return resolve(null);
         }
 
@@ -75,23 +82,25 @@ const getCroppedImageBlob = (imageFile: File, type: 'avatar' | 'banner', scale: 
         canvas.width = targetWidth;
         canvas.height = targetHeight;
 
-        // Determine the largest possible crop area within the source image
-        const imageAspect = image.width / image.height;
+        // Use natural dimensions for accuracy
+        const imgWidth = image.naturalWidth;
+        const imgHeight = image.naturalHeight;
+        const imageAspect = imgWidth / imgHeight;
         const cropAspect = canvas.width / canvas.height;
         let sx, sy, sWidth, sHeight;
 
         if (imageAspect > cropAspect) {
             // Image is wider than crop area (cut left/right)
-            sHeight = image.height;
-            sWidth = image.height * cropAspect;
-            sx = (image.width - sWidth) / 2;
+            sHeight = imgHeight;
+            sWidth = imgHeight * cropAspect;
+            sx = (imgWidth - sWidth) / 2;
             sy = 0;
         } else {
             // Image is taller than crop area (cut top/bottom)
-            sWidth = image.width;
-            sHeight = image.width / cropAspect;
+            sWidth = imgWidth;
+            sHeight = imgWidth / cropAspect;
             sx = 0;
-            sy = (image.height - sHeight) / 2;
+            sy = (imgHeight - sHeight) / 2;
         }
 
         // Apply Zoom (Scale): The crop area in the source image is scaled down by the 'scale' factor.
@@ -102,39 +111,44 @@ const getCroppedImageBlob = (imageFile: File, type: 'avatar' | 'banner', scale: 
         sHeight *= inverseScale;
         
         // Re-center the crop area after scaling
-        sx = image.width / 2 - sWidth / 2;
-        sy = image.height / 2 - sHeight / 2;
+        sx = imgWidth / 2 - sWidth / 2;
+        sy = imgHeight / 2 - sHeight / 2;
 
         // Ensure crop area is within image bounds (clamping)
-        // If the scaled crop area (sWidth/sHeight) exceeds the image bounds, clamp it.
-        // For simplicity with center crop, we trust the scale is reasonable, but we ensure it doesn't start before 0.
         sx = Math.max(0, sx);
         sy = Math.max(0, sy);
-        
-        // NEW: Additional safeguard against NaN/Infinity (redundant with dimension check, but safe)
+
+        // NEW: Final safeguard against NaN/Infinity/negative (logs params for debug)
         if (!isFinite(sx) || !isFinite(sy) || !isFinite(sWidth) || !isFinite(sHeight) || sWidth <= 0 || sHeight <= 0) {
-          console.error("Invalid crop parameters detected.");
+          console.error("Invalid crop parameters:", { sx, sy, sWidth, sHeight, imgWidth, imgHeight, scale });
+          alert("Crop calculation failed. Please try a different image or zoom level.");
           return resolve(null);
         }
-        
-        // Final Draw: draw the calculated section (sx, sy, sWidth, sHeight) 
-        // onto the entire canvas (0, 0, targetWidth, targetHeight)
+
+        // Draw (safe now)
         ctx.drawImage(image, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
 
         // Convert canvas to Blob
         canvas.toBlob((blob) => {
-          resolve(blob);
+          if (blob) {
+            resolve(blob);
+          } else {
+            console.error("Failed to create Blob from canvas.");
+            resolve(null);
+          }
         }, imageFile.type, 0.95); // Quality 0.95
 
       };
       image.onerror = () => {
-        console.error("Error loading image for cropping.");
+        console.error("Error loading image for cropping. File:", imageFile.name);
+        alert("Failed to load image. Please select a valid file.");
         resolve(null);
       };
       image.src = e.target?.result as string;
     };
     reader.onerror = () => {
-      console.error("Error reading file for cropping.");
+      console.error("Error reading file for cropping. File:", imageFile.name);
+      alert("Failed to read file. Please try again.");
       resolve(null);
     };
     reader.readAsDataURL(imageFile);
