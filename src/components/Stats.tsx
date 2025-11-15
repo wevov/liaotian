@@ -27,11 +27,6 @@ const USER_ACTIVITY_STATS = [
   { key: 'online_1y', icon: Clock, description: 'Online in last year', type: 'activity' as const, minutes: 365 * 24 * 60 },
 ];
 
-const PLATFORM_USAGE_STATS = [
-    { key: 'storage_used', icon: HardDrive, description: 'Total Storage Used', type: 'usage' as const, unit: 'GB' },
-    { key: 'bandwidth_used', icon: Zap, description: 'Total Bandwidth Used', type: 'usage' as const, unit: 'TB' },
-];
-
 // --- TYPE DEFINITIONS ---
 
 type StatType = 'count' | 'activity' | 'usage' | 'highest_follower';
@@ -46,15 +41,6 @@ type Statistic = {
   errorMessage?: string;
   unit?: string; // Used for usage stats
   type: StatType;
-};
-
-// Profile type for the highest follower stat
-type ProfileType = {
-  id: string;
-  username: string;
-  display_name: string;
-  avatar_url: string;
-  follower_count: number;
 };
 
 // --- HELPER FUNCTIONS ---
@@ -159,77 +145,6 @@ const fetchActivityStats = async (): Promise<Statistic[]> => {
   return Promise.all(fetchPromises);
 };
 
-// Simulated fetch for Highest Followers (requires a 'followers' table or a pre-calculated column)
-const fetchHighestFollower = async (): Promise<Statistic> => {
-    const key = 'highest_followers';
-    const label = 'Highest Followers Profile';
-    const icon = TrendingUp;
-
-    try {
-        // --- SIMULATION START ---
-        // In a real app, this would be a complex query, e.g.:
-        // SELECT p.*, count(f.id) AS follower_count FROM profiles p JOIN followers f ON p.id = f.followed_id GROUP BY p.id ORDER BY follower_count DESC LIMIT 1
-        
-        // Mock data for the top user
-        const mockTopProfile: ProfileType = {
-            id: 'mock-uuid-12345',
-            username: 'supa_star',
-            display_name: 'SupaStar Dev',
-            avatar_url: 'https://i.pravatar.cc/150?u=supa_star',
-            follower_count: 125000,
-        };
-
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-
-        return {
-            key, label, icon, 
-            value: { profile: mockTopProfile }, 
-            error: false, 
-            type: 'highest_follower'
-        } as Statistic;
-        // --- SIMULATION END ---
-
-    } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : 'Unknown Error';
-        return { 
-            key, label, icon, 
-            value: 'Error', 
-            error: true, 
-            errorMessage: `(Failed to fetch top profile: ${errorMessage})`, 
-            type: 'highest_follower' 
-        } as Statistic;
-    }
-};
-
-// Mocked fetch for platform usage (usually requires an Admin/Service Role or external API)
-const fetchPlatformUsage = async (): Promise<Statistic[]> => {
-    // --- MOCK DATA START ---
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-
-    const results: Statistic[] = PLATFORM_USAGE_STATS.map(stat => {
-        let value: number = 0;
-        if (stat.key === 'storage_used') {
-            value = 47.3; // GB
-        } else if (stat.key === 'bandwidth_used') {
-            value = 1.8; // TB
-        }
-
-        return {
-            key: stat.key,
-            label: stat.description,
-            icon: stat.icon,
-            value: value,
-            unit: stat.unit,
-            error: false,
-            type: stat.type
-        } as Statistic;
-    });
-    // --- MOCK DATA END ---
-
-    // Note: In a real environment, getting these stats requires elevated permissions or querying the Supabase management API, not the standard client-side API.
-    return results;
-};
-
 
 // --- MAIN COMPONENT ---
 
@@ -289,38 +204,6 @@ export const Stats: React.FC = () => {
   const renderStatCard = (stat: Statistic) => {
     const Icon = stat.icon;
     const isError = stat.error || stat.value === 'Error';
-    const isProfile = stat.type === 'highest_follower' && !isError && typeof stat.value !== 'number' && typeof stat.value !== 'string';
-    const profile = isProfile ? (stat.value as { profile: ProfileType }).profile : null;
-
-    if (isProfile && profile) {
-        return (
-            <div key={stat.key} className="p-6 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] col-span-full lg:col-span-2">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-medium text-[rgb(var(--color-text-secondary))] uppercase tracking-wider flex items-center">
-                        <Icon className="h-4 w-4 mr-2 text-[rgb(var(--color-primary))]" /> {stat.label}
-                    </h3>
-                    <TrendingUp className="h-6 w-6 text-[rgb(var(--color-primary))]" />
-                </div>
-                <div className="flex items-center space-x-4 p-4 rounded-lg bg-[rgb(var(--color-background))]">
-                    <img 
-                        src={profile.avatar_url} 
-                        alt={`${profile.username}'s avatar`} 
-                        className="w-16 h-16 rounded-full object-cover border-2 border-[rgb(var(--color-primary))]"
-                    />
-                    <div>
-                        <p className="text-xl font-bold text-[rgb(var(--color-text))]">
-                            {profile.display_name}
-                        </p>
-                        <p className="text-sm text-[rgb(var(--color-text-secondary))]">
-                            @{profile.username}
-                        </p>
-                        <p className="mt-1 text-2xl font-extrabold text-[rgb(var(--color-text))]">
-                            {profile.follower_count.toLocaleString()} <span className="text-base font-normal text-[rgb(var(--color-primary))]">Followers</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
-        );
     }
 
 
@@ -378,7 +261,7 @@ export const Stats: React.FC = () => {
           Platform Statistics
         </h2>
         <p className="ml-3 mt-1 text-lg text-[rgb(var(--color-text-secondary))]">
-          Real-time database counts, user activity, and platform usage.
+          Real-time data about all content and users
         </p>
       </div>
 
@@ -389,15 +272,6 @@ export const Stats: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Highest Followers Section (Separate layout) */}
-          <h3 className="text-2xl font-semibold text-[rgb(var(--color-text))] mb-4 flex items-center">
-            <TrendingUp className="h-5 w-5 mr-2 text-[rgb(var(--color-accent))]" /> Top Community & Usage
-          </h3>
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-10">
-            {highestFollowerStat && renderStatCard(highestFollowerStat)}
-            {usageStats.map(renderStatCard)}
-          </div>
-          
           {/* Core Table Counts Section */}
           <h3 className="text-2xl font-semibold text-[rgb(var(--color-text))] mb-4 flex items-center">
             <Database className="h-5 w-5 mr-2 text-[rgb(var(--color-accent))]" /> Core Database Entries
