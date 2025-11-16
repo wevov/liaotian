@@ -1,163 +1,189 @@
 // src/components/Status.tsx
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase, uploadStatusMedia, Profile, Status } from '../lib/supabase';
+import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import { supabase, uploadStatusMedia, Profile, Status as StatusType } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { X, Plus, Camera, Video, Image as ImageIcon, Edit3, ChevronLeft, ChevronRight, Clock, Archive, Home } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { 
+  X, 
+  Plus, 
+  Camera, 
+  Video, 
+  ImageIcon, 
+  Type, 
+  ChevronLeft, 
+  ChevronRight, 
+  Archive, 
+  Home,
+  Send,
+  Pause,
+  Play
+} from 'lucide-react';
 
 const FOLLOW_ONLY_FEED = import.meta.env.VITE_FOLLOW_ONLY_FEED === 'true';
 
-// Simple hook for mobile detection
-const useIsMobile = () => {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-  return isMobile;
-};
+// Helper Type for the tray
+interface ProfileWithStatus extends Profile {
+  statuses: StatusType[]; // We'll attach the list of statuses
+}
 
-// StatusTray Component
+// =======================================================================
+//  1. STATUS TRAY
+//  Polished version of the tray, now passes the *entire user list*
+//  to the viewer event.
+// =======================================================================
+
 export const StatusTray: React.FC = () => {
   const { user, profile } = useAuth();
-  const [activeStatuses, setActiveStatuses] = useState<{ [key: string]: Status }>({});
-  const [ownStatus, setOwnStatus] = useState<Status | null>(null);
-  const navigate = useNavigate();
+  const [statusUsers, setStatusUsers] = useState<ProfileWithStatus[]>([]);
+  const [ownStatus, setOwnStatus] = useState<ProfileWithStatus | null>(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     const fetchActiveStatuses = async () => {
       try {
-        let query = supabase
+        // 1. Get all active statuses
+        let statusQuery = supabase
           .from('statuses')
-          .select('*, profiles!user_id(*)')
+          .select('*, profiles!user_id(*)') // Grab profile data with it
           .gt('expires_at', new Date().toISOString())
-          .order('created_at', { ascending: false })
-          .limit(50);
+          .order('created_at', { ascending: true }); // Order by creation time
 
-        // If follow-only, filter by follows (assuming a 'follows' table exists; adjust if needed)
         if (FOLLOW_ONLY_FEED) {
-          // Placeholder: fetch follows and filter in JS or use RPC
-          let followIds: string[] = [];
-          try {
-            const { data: follows } = await supabase.from('follows').select('followed_id').eq('follower_id', user.id);  // Assume follows table
-            followIds = follows?.map(f => f.followed_id) || [];
-          } catch (followError) {
-            console.warn('Follows table not found or error fetching follows:', followError);
-            followIds = [];
-          }
-          query = query.in('user_id', [user.id, ...followIds]);
+          const { data: follows } = await supabase
+            .from('follows')
+            .select('following_id')
+            .eq('follower_id', user.id);
+          
+          const followingIds = follows?.map(f => f.following_id) || [];
+          statusQuery = statusQuery.in('user_id', [user.id, ...followingIds]);
         }
 
-        const { data } = await query;
-        if (!data) return;
+        const { data: statuses } = await statusQuery;
+        if (!statuses) return;
 
-        // Group by user_id, take latest per user
-        const grouped: { [key: string]: Status } = {};
-        data.forEach((status: Status) => {
-          if (!grouped[status.user_id] || new Date(status.created_at) > new Date(grouped[status.user_id].created_at)) {
-            grouped[status.user_id] = status;
+        // 2. Group statuses by user
+        const usersMap = new Map<string, ProfileWithStatus>();
+
+        for (const status of statuses) {
+          if (!status.profiles) continue; // Skip if profile is null
+
+          const userId = status.user_id;
+          if (!usersMap.has(userId)) {
+            // First time seeing this user, add them
+            usersMap.set(userId, {
+              ...status.profiles,
+              statuses: [status],
+            });
+          } else {
+            // User already in map, just add the status
+            usersMap.get(userId)?.statuses.push(status);
           }
+        }
+        
+        // 3. Separate "self" from "others"
+        const self = usersMap.get(user.id) || { ...profile, statuses: [] };
+        usersMap.delete(user.id);
+        
+        const others = Array.from(usersMap.values()).sort((a, b) => {
+            // Sort others by the latest status time, descending
+            const aLast = new Date(a.statuses[a.statuses.length - 1].created_at).getTime();
+            const bLast = new Date(b.statuses[b.statuses.length - 1].created_at).getTime();
+            return bLast - aLast;
         });
 
-        setActiveStatuses(grouped);
+        setOwnStatus(self);
+        setStatusUsers(others);
 
-        // Ensure own is always tracked
-        const own = grouped[user.id] || null;
-        setOwnStatus(own);
       } catch (error) {
         console.error('Error fetching statuses:', error);
       }
     };
 
     fetchActiveStatuses();
-    const interval = setInterval(fetchActiveStatuses, 30000);  // Refresh every 30s
+    const interval = setInterval(fetchActiveStatuses, 60000); // Refresh every 60s
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, profile]);
 
-  const handleOwnAvatarClick = () => {
-    if (ownStatus) {
-      window.dispatchEvent(new CustomEvent('openStatusViewer', { detail: { userId: user.id } }));
+  const openViewer = (initialUserId: string) => {
+    if (!ownStatus) return;
+    
+    // Create the full queue: Self first, then others
+    const fullQueue = [ownStatus, ...statusUsers];
+    
+    // Dispatch event with the *full queue* and the *starting user*
+    window.dispatchEvent(new CustomEvent('openStatusViewer', { 
+      detail: { 
+        initialUserId,
+        users: fullQueue
+      } 
+    }));
+  };
+
+  const handleOwnClick = () => {
+    if (ownStatus && ownStatus.statuses.length > 0) {
+      openViewer(user!.id);
     } else {
       window.dispatchEvent(new CustomEvent('openStatusCreator'));
     }
   };
-
+  
   const handleOwnPlusClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     window.dispatchEvent(new CustomEvent('openStatusCreator'));
   };
 
-  const handleOtherClick = (statusUserId: string) => {
-    navigate(`/?status=${statusUserId}`);  // Or set global state
-    window.dispatchEvent(new CustomEvent('openStatusViewer', { detail: { userId: statusUserId } }));
-  };
+  if (!user) return null; // Don't show tray if logged out
 
   return (
     <div className="flex space-x-4 p-4 overflow-x-auto scrollbar-hide bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]">
       {/* Own Circle */}
-      <div className="flex flex-col items-center space-y-1 flex-shrink-0">
-        <div 
-          onClick={handleOwnAvatarClick}
-          className="relative w-16 h-16 rounded-full border-2 border-dashed cursor-pointer group"
-          style={{ borderColor: 'rgb(var(--color-border))' }}
-        >
+      <div 
+        onClick={handleOwnClick}
+        className="flex flex-col items-center space-y-1 flex-shrink-0 cursor-pointer group"
+      >
+        <div className="relative w-16 h-16 rounded-full">
           <img 
             src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username}`}
-            className="w-full h-full rounded-full object-cover"
+            className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))]"
             alt="Your avatar"
           />
+          {/* Gradient Ring if status exists */}
+          {ownStatus && ownStatus.statuses.length > 0 && (
+             <div className="absolute inset-0 rounded-full p-[2px] -z-10 bg-gradient-to-tr from-[rgb(var(--color-accent))] to-[rgb(var(--color-primary))]"/>
+          )}
+          {/* Plain ring if no status */}
+          {(!ownStatus || ownStatus.statuses.length === 0) && (
+             <div className="absolute inset-0 rounded-full border-2 border-dashed border-[rgb(var(--color-border))] -z-10"/>
+          )}
+          
           <div 
             onClick={handleOwnPlusClick}
-            className="absolute -bottom-1 -right-1 w-6 h-6 bg-[rgb(var(--color-primary))] rounded-full flex items-center justify-center group-hover:scale-110 transition cursor-pointer"
+            className="absolute -bottom-1 -right-1 w-6 h-6 bg-[rgb(var(--color-primary))] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform cursor-pointer border-2 border-[rgb(var(--color-surface))]"
           >
-            <Plus size={12} className="text-white" />
+            <Plus size={16} className="text-[rgb(var(--color-text-on-primary))]" />
           </div>
-          {ownStatus && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
-              <defs>
-                <linearGradient id={`own-grad`} x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="rgb(var(--color-primary))" />
-                  <stop offset="100%" stopColor="rgb(var(--color-accent))" />
-                </linearGradient>
-              </defs>
-              <circle cx="50%" cy="50%" r="50%" fill="none" stroke="url(#own-grad)" strokeWidth="2" />
-            </svg>
-          )}
         </div>
         <span className="text-xs text-center text-[rgb(var(--color-text-secondary))] truncate w-16">Your Status</span>
       </div>
 
       {/* Others' Circles */}
-      {Object.values(activeStatuses)
-        .filter(s => s.user_id !== user?.id)
-        .map((status) => (
-          <div key={status.user_id} className="flex flex-col items-center space-y-1 flex-shrink-0">
-            <div 
-              onClick={() => handleOtherClick(status.user_id)}
-              className="relative w-16 h-16 rounded-full cursor-pointer"
-            >
+      {statusUsers.map((statusUser) => (
+          <div 
+            key={statusUser.id} 
+            onClick={() => openViewer(statusUser.id)}
+            className="flex flex-col items-center space-y-1 flex-shrink-0 cursor-pointer group"
+          >
+            <div className="relative w-16 h-16 rounded-full">
               <img 
-                src={status.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${status.profiles?.username}`}
-                className="w-full h-full rounded-full object-cover"
-                alt={status.profiles?.display_name}
+                src={statusUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${statusUser.username}`}
+                className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))]"
+                alt={statusUser.display_name}
               />
-              <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                <defs>
-                  <linearGradient id={`grad-${status.user_id}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="rgb(var(--color-primary))" />
-                    <stop offset="100%" stopColor="rgb(var(--color-accent))" />
-                  </linearGradient>
-                </defs>
-                <circle cx="50%" cy="50%" r="50%" fill="none" stroke="url(#grad-${status.user_id})" strokeWidth="2" />
-              </svg>
+              {/* Gradient Ring */}
+              <div className="absolute inset-0 rounded-full p-[2px] -z-10 bg-gradient-to-tr from-[rgb(var(--color-accent))] to-[rgb(var(--color-primary))] group-hover:scale-105 transition-transform"/>
             </div>
             <span className="text-xs text-center text-[rgb(var(--color-text-secondary))] truncate w-16">
-              {status.profiles?.display_name || status.profiles?.username}
+              {statusUser.display_name || statusUser.username}
             </span>
           </div>
         ))}
@@ -165,138 +191,53 @@ export const StatusTray: React.FC = () => {
   );
 };
 
-// StatusCreator Component (Modal for creation)
+
+// =======================================================================
+//  2. STATUS CREATOR
+//  Renovated full-screen modal for a more immersive creation experience.
+// =======================================================================
 const StatusCreator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { user } = useAuth();
-  const [step, setStep] = useState<'capture' | 'upload' | 'edit'>('capture');
-  const [mediaBlob, setMediaBlob] = useState<Blob | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState<string>('');
   const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
-  const [textOverlay, setTextOverlay] = useState({ text: '', x: 50, y: 50, fontSize: 24, color: 'white' });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [textOverlay, setTextOverlay] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
 
-  // Capture photo
-  const capturePhoto = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await new Promise(resolve => videoRef.current?.addEventListener('loadedmetadata', resolve));
-        const canvas = canvasRef.current;
-        if (canvas && videoRef.current) {
-          canvas.width = videoRef.current.videoWidth;
-          canvas.height = videoRef.current.videoHeight;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(videoRef.current, 0, 0);
-          canvas.toBlob((blob) => {
-            if (blob) {
-              setMediaBlob(blob);
-              setMediaType('image');
-              setStep('edit');
-            }
-            stream.getTracks().forEach(track => track.stop());
-          }, 'image/jpeg');
-        }
+  // Clean up the object URL to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (mediaPreviewUrl) {
+        URL.revokeObjectURL(mediaPreviewUrl);
       }
-    } catch (error) {
-      console.error('Error capturing photo:', error);
-    }
-  };
+    };
+  }, [mediaPreviewUrl]);
 
-  // Record video (long press simulation with hold button)
-  const [recording, setRecording] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-
-  const startRecord = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      mediaRecorderRef.current.ondataavailable = (e) => chunksRef.current.push(e.data);
-      mediaRecorderRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        setMediaBlob(blob);
-        setMediaType('video');
-        setStep('edit');
-        stream.getTracks().forEach(track => track.stop());
-        chunksRef.current = [];
-      };
-      mediaRecorderRef.current.start();
-      setRecording(true);
-    } catch (error) {
-      console.error('Error starting recording:', error);
-    }
-  };
-
-  const stopRecord = () => {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
-  };
-
-  // Upload file
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (file.type.startsWith('image/')) {
-        setMediaType('image');
-      } else if (file.type.startsWith('video/')) {
-        setMediaType('video');
-      }
-      setMediaBlob(file);
-      setStep('edit');
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+        alert("Only image and video files are allowed for statuses.");
+        return;
     }
+    
+    setMediaType(file.type.startsWith('image/') ? 'image' : 'video');
+    setMediaFile(file);
+    setMediaPreviewUrl(URL.createObjectURL(file));
   };
 
-  // Drag text
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    const rect = editorRef.current?.getBoundingClientRect();
-    if (rect) {
-      setDragOffset({
-        x: e.clientX - rect.left - textOverlay.x,
-        y: e.clientY - rect.top - textOverlay.y,
-      });
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !editorRef.current) return;
-    const rect = editorRef.current.getBoundingClientRect();
-    setTextOverlay(prev => ({
-      ...prev,
-      x: Math.max(0, Math.min(100, ((e.clientX - rect.left - dragOffset.x) / rect.width) * 100)),
-      y: Math.max(0, Math.min(100, ((e.clientY - rect.top - dragOffset.y) / rect.height) * 100)),
-    }));
-  };
-
-  const handleMouseUp = () => setIsDragging(false);
-
-  // Post status
   const handlePost = async () => {
-    if (!user || !mediaBlob) return;
+    if (!user || !mediaFile) return;
+
+    setIsPosting(true);
 
     try {
-      // Convert Blob to File if necessary to ensure .name exists
-      let uploadFile: File;
-      if (mediaBlob instanceof File) {
-        uploadFile = mediaBlob;
-      } else {
-        const extension = mediaType === 'image' ? 'jpg' : 'webm';
-        const fileName = `status-${Date.now()}.${extension}`;
-        uploadFile = new File([mediaBlob], fileName, { type: mediaBlob.type });
-      }
-
-      const uploadResult = await uploadStatusMedia(uploadFile);
+      const uploadResult = await uploadStatusMedia(mediaFile);
       if (!uploadResult) {
-        alert('Upload failed. Please try again.');
-        return;
+        throw new Error('Upload failed.');
       }
 
       const { error } = await supabase
@@ -305,225 +246,432 @@ const StatusCreator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           user_id: user.id,
           media_url: uploadResult.url,
           media_type: mediaType,
-          text_overlay: textOverlay.text ? textOverlay : {},
+          // Simple text overlay, centered.
+          // A real app would have position, color, font.
+          text_overlay: textOverlay ? { 
+            text: textOverlay, 
+            x: 50, 
+            y: 50, 
+            color: 'white',
+            fontSize: 24
+          } : {},
         });
 
       if (error) {
-        console.error('Insert error:', error);
-        alert('Failed to post status. Please try again.');
-        return;
+        throw error;
       }
-
-      onClose();
-      setStep('capture');
-      setMediaBlob(null);
-      setTextOverlay({ text: '', x: 50, y: 50, fontSize: 24, color: 'white' });
+      
+      onClose(); // Success
     } catch (error) {
-      console.error('Post error:', error);
-      alert('An error occurred while posting your status.');
+      console.error('Error posting status:', error);
+      alert('Failed to post status. Please try again.');
+    } finally {
+      setIsPosting(false);
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[1000] bg-black flex items-center justify-center p-4" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
-      <div className="bg-[rgb(var(--color-surface))] rounded-2xl p-4 w-full max-w-md max-h-[90vh] overflow-y-auto relative">
-        <button onClick={onClose} className="absolute top-2 right-2 p-1 hover:bg-[rgb(var(--color-surface-hover))]">
-          <X size={20} />
-        </button>
+  const reset = () => {
+    setMediaFile(null);
+    setMediaPreviewUrl('');
+    setTextOverlay('');
+  }
 
-        {step === 'capture' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-center">Create Status</h2>
-            <video ref={videoRef} className="w-full h-48 object-cover rounded" autoPlay muted />
-            <div className="flex space-x-2">
-              <button onClick={capturePhoto} className="flex-1 p-3 bg-[rgb(var(--color-primary))] text-white rounded-lg flex items-center justify-center space-x-2">
-                <Camera size={20} /> <span>Photo</span>
-              </button>
-              <button 
-                onMouseDown={startRecord} 
-                onMouseUp={stopRecord} 
-                onMouseLeave={stopRecord}
-                className={`flex-1 p-3 rounded-lg flex items-center justify-center space-x-2 ${recording ? 'bg-red-500' : 'bg-[rgb(var(--color-accent))]'}`}
-              >
-                <Video size={20} /> <span>{recording ? 'Stop' : 'Video'}</span>
-              </button>
-            </div>
-            <button onClick={() => fileInputRef.current?.click()} className="w-full p-3 bg-[rgb(var(--color-border))] text-[rgb(var(--color-text))] rounded-lg flex items-center justify-center space-x-2">
-              <ImageIcon size={20} /> <span>Upload</span>
+  return (
+    <div className="fixed inset-0 z-[1000] bg-black flex items-center justify-center">
+            <div className="relative w-full h-full max-w-lg max-h-screen bg-black rounded-lg overflow-hidden">
+        
+        {/* Header Bar */}
+        <div className="absolute top-0 left-0 w-full p-4 z-20 flex justify-between items-center">
+          <button 
+            onClick={mediaFile ? reset : onClose} 
+            className="p-2 bg-black/50 rounded-full text-white"
+          >
+            <X size={24} />
+          </button>
+          
+          {mediaFile && (
+             <button 
+              onClick={handlePost}
+              disabled={isPosting}
+              className="px-4 py-2 bg-[rgb(var(--color-primary))] text-[rgb(var(--color-text-on-primary))] rounded-full font-bold text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              {isPosting ? 'Posting...' : 'Post Status'}
+              {!isPosting && <Send size={16} />}
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleUpload} className="hidden" />
+          )}
+        </div>
+
+        {/* Media Preview */}
+        {mediaFile && (
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center z-10">
+            {mediaType === 'image' && (
+              <img src={mediaPreviewUrl} className="max-w-full max-h-full object-contain" alt="Preview" />
+            )}
+            {mediaType === 'video' && (
+              <video src={mediaPreviewUrl} className="max-w-full max-h-full" autoPlay muted loop playsInline />
+            )}
+
+            {/* Text Overlay Input */}
+            <div className="absolute w-full p-4 flex items-center justify-center pointer-events-none">
+              <input
+                type="text"
+                value={textOverlay}
+                onChange={(e) => setTextOverlay(e.target.value)}
+                placeholder="Add text..."
+                className="w-full text-center bg-black/60 text-white text-2xl font-bold p-2 outline-none border-none pointer-events-auto"
+                style={{ textShadow: '0px 0px 8px rgba(0,0,0,0.7)' }}
+              />
+            </div>
           </div>
         )}
 
-        {step === 'edit' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-bold text-center">Edit Status</h2>
-            <div ref={editorRef} className="relative w-full h-64 bg-black rounded overflow-hidden cursor-move" style={{ position: 'relative' }}>
-              {mediaType === 'image' && mediaBlob && (
-                <img src={URL.createObjectURL(mediaBlob)} className="w-full h-full object-cover" alt="Preview" />
-              )}
-              {mediaType === 'video' && mediaBlob && (
-                <video src={URL.createObjectURL(mediaBlob)} className="w-full h-full object-cover" controls muted />
-              )}
-              {textOverlay.text && (
-                <div
-                  className="absolute select-none pointer-events-none bg-black/50 text-white p-2 rounded"
-                  style={{
-                    left: `${textOverlay.x}%`,
-                    top: `${textOverlay.y}%`,
-                    fontSize: `${textOverlay.fontSize}px`,
-                    color: textOverlay.color,
-                  }}
-                  onMouseDown={handleMouseDown}
-                >
-                  {textOverlay.text}
-                </div>
-              )}
-            </div>
-            <input
-              type="text"
-              placeholder="Add text..."
-              value={textOverlay.text}
-              onChange={(e) => setTextOverlay(prev => ({ ...prev, text: e.target.value }))}
-              className="w-full p-2 border border-[rgb(var(--color-border))] rounded"
-            />
-            <div className="flex space-x-2 text-sm">
-              <button onClick={() => setTextOverlay(prev => ({ ...prev, fontSize: prev.fontSize + 4 }))}><Edit3 size={16} /></button>
-              <input type="color" value={textOverlay.color} onChange={(e) => setTextOverlay(prev => ({ ...prev, color: e.target.value }))} className="w-8 h-8" />
-            </div>
-            <button onClick={handlePost} className="w-full p-3 bg-[rgb(var(--color-primary))] text-white rounded-lg">
-              Post Status
+        {/* Initial Uploader UI */}
+        {!mediaFile && (
+          <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-4 z-0">
+            {/* We'll skip the live camera for this rewrite, focusing on upload */}
+            <h2 className="text-2xl font-bold text-white">Create a Status</h2>
+            <p className="text-gray-400 text-center">Upload an image or a video to share with your followers.</p>
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-4 px-6 py-3 bg-[rgb(var(--color-primary))] text-[rgb(var(--color-text-on-primary))] rounded-full font-bold flex items-center gap-2"
+            >
+              <ImageIcon size={20} /> Upload Media
             </button>
+            <input 
+              ref={fileInputRef} 
+              type="file" 
+              accept="image/*,video/*" 
+              onChange={handleFileSelect} 
+              className="hidden" 
+            />
           </div>
+        )}
+
+        {/* Loading Overlay */}
+        {isPosting && (
+            <div className="absolute inset-0 z-30 bg-black/70 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+            </div>
         )}
       </div>
-      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 };
 
-// StatusViewer Component (Full screen for viewing)
-const StatusViewer: React.FC<{ userId: string; onClose: () => void }> = ({ userId, onClose }) => {
-  const [statuses, setStatuses] = useState<Status[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showText, setShowText] = useState(true);
-  const [paused, setPaused] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const { user } = useAuth();
+// =======================================================================
+//  3. STATUS VIEWER (AND SUB-COMPONENTS)
+//  Completely rewritten to support a global queue, pre-fetching,
+//  and automatic user-to-user transitions.
+// =======================================================================
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true });
-  };
+/**
+ * Single progress bar, controls its own animation
+ */
+const StoryProgressBar: React.FC<{
+  duration: number;
+  isActive: boolean;
+  isPaused: boolean;
+  onFinished: () => void;
+}> = ({ duration, isActive, isPaused, onFinished }) => {
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const fetchStatuses = async () => {
-      try {
-        const { data } = await supabase
-          .from('statuses')
-          .select('*, profiles!user_id(*)')
-          .eq('user_id', userId)
-          .gt('expires_at', new Date().toISOString())  // Active only
-          .order('created_at', { ascending: true });
-        setStatuses(data || []);
-        if (data && data.length > 0) setCurrentIndex(0);
-      } catch (error) {
-        console.error('Error fetching statuses for viewer:', error);
+    if (!isActive) {
+      // If not active, be either 0% (pending) or 100% (finished)
+      setProgress(isActive ? 0 : 100);
+      return;
+    }
+    
+    // Reset progress when it becomes the active story
+    setProgress(0);
+    
+    // Start the timer
+    const startTime = Date.now();
+    let frameId: number;
+
+    const animate = () => {
+      if (isPaused) {
+        // Don't advance time if paused
+        frameId = requestAnimationFrame(animate);
+        return;
+      }
+
+      const elapsedTime = Date.now() - startTime;
+      const newProgress = (elapsedTime / duration) * 100;
+
+      if (newProgress >= 100) {
+        setProgress(100);
+        onFinished();
+      } else {
+        setProgress(newProgress);
+        frameId = requestAnimationFrame(animate);
       }
     };
-    fetchStatuses();
-  }, [userId]);
-
-  useEffect(() => {
-    if (statuses.length === 0 || paused) return;
-
-    if (statuses[currentIndex].media_type === 'image') {
-      timerRef.current = setTimeout(() => {
-        if (currentIndex < statuses.length - 1) {
-          setCurrentIndex(currentIndex + 1);
-        } else {
-          onClose();
-        }
-      }, 5000); // 5s for images
-    }
+    
+    frameId = requestAnimationFrame(animate);
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      cancelAnimationFrame(frameId);
     };
-  }, [currentIndex, statuses, paused, onClose]);
-
-  const handleTouchStart = () => setPaused(true);
-  const handleTouchEnd = () => setPaused(false);
-
-  const handlePrev = () => setCurrentIndex(Math.max(0, currentIndex - 1));
-  const handleNext = () => setCurrentIndex(Math.min(statuses.length - 1, currentIndex + 1));
-
-  if (statuses.length === 0) return null;
-
-  const current = statuses[currentIndex];
-  const overlay = current.text_overlay as any;
+  }, [isActive, isPaused, duration, onFinished]);
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black flex flex-col" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      {/* Progress Bars */}
-      <div className="flex space-x-2 p-2 absolute top-0 left-0 w-full z-10">
-        {statuses.map((_, idx) => (
-          <div key={idx} className="flex-1 h-1 bg-white/30 rounded-full">
-            <div className={`h-full bg-white rounded-full transition-all ${idx < currentIndex ? 'w-full' : idx === currentIndex && !paused ? 'animate-progress' : 'w-0'}`} />
+    <div className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
+      <div 
+        className="h-full bg-white transition-all duration-75 ease-linear"
+        style={{ width: `${progress}%` }} 
+      />
+    </div>
+  );
+};
+
+/**
+ * The Main Story Viewer Component
+ */
+const StatusViewer: React.FC<{
+  allStatusUsers: ProfileWithStatus[];
+  initialUserId: string;
+  onClose: () => void;
+}> = ({ allStatusUsers, initialUserId, onClose }) => {
+  const { user } = useAuth();
+  
+  // State for the *entire* queue
+  const [currentUserIndex, setCurrentUserIndex] = useState(() => 
+    Math.max(0, allStatusUsers.findIndex(u => u.id === initialUserId))
+  );
+  
+  // State for the *current user's* stories
+  const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const currentUser = allStatusUsers[currentUserIndex];
+  const currentStory = currentUser?.statuses?.[currentStoryIndex];
+  
+  // --- Navigation Logic ---
+
+  const goToNextUser = useCallback(() => {
+    if (currentUserIndex < allStatusUsers.length - 1) {
+      setCurrentUserIndex(prev => prev + 1);
+      setCurrentStoryIndex(0);
+      setIsLoading(true); // Will be set to false once media loads
+    } else {
+      onClose(); // Last user, close viewer
+    }
+  }, [currentUserIndex, allStatusUsers.length, onClose]);
+
+  const goToNextStory = useCallback(() => {
+    if (currentUser && currentStoryIndex < currentUser.statuses.length - 1) {
+      setCurrentStoryIndex(prev => prev + 1);
+    } else {
+      goToNextUser(); // Go to next user if no more stories
+    }
+  }, [currentStoryIndex, currentUser, goToNextUser]);
+
+  const goToPrevUser = () => {
+    if (currentUserIndex > 0) {
+      setCurrentUserIndex(prev => prev - 1);
+      setCurrentStoryIndex(0);
+      setIsLoading(true);
+    }
+  };
+
+  const goToPrevStory = () => {
+    if (currentStoryIndex > 0) {
+      setCurrentStoryIndex(prev => prev - 1);
+    } else {
+      goToPrevUser(); // Go to prev user if on first story
+    }
+  };
+  
+  // --- Media Loading and Controls ---
+  
+  useEffect(() => {
+    // This effect handles loading the media for the current story
+    if (!currentStory) return;
+    
+    setIsLoading(true);
+    const mediaUrl = currentStory.media_url;
+    
+    if (currentStory.media_type === 'image') {
+      const img = new Image();
+      img.src = mediaUrl;
+      img.onload = () => setIsLoading(false);
+      img.onerror = () => {
+        console.error("Failed to load story image");
+        goToNextStory(); // Skip broken story
+      };
+    } else if (currentStory.media_type === 'video') {
+      // Video loading is handled by the <video> element's `onCanPlay` event
+      if (videoRef.current) {
+        videoRef.current.src = mediaUrl;
+        videoRef.current.load();
+      }
+    }
+  }, [currentStory, goToNextStory]);
+  
+  // Handle video playback
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+        if (isPaused) {
+            video.pause();
+        } else {
+            video.play().catch(e => console.warn("Video play interrupted"));
+        }
+    }
+  }, [isPaused, currentStory]);
+
+  // --- Input Handlers ---
+
+  const handlePointerDown = () => setIsPaused(true);
+  const handlePointerUp = () => setIsPaused(false);
+
+  const handleClickNavigation = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickThreshold = rect.width * 0.3; // 30% of width
+    
+    if (clickX < clickThreshold) {
+      goToPrevStory();
+    } else {
+      goToNextStory();
+    }
+  };
+
+  if (!currentUser || !currentStory) {
+    // This can happen briefly during transitions
+    return (
+        <div className="fixed inset-0 z-[1000] bg-black flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+        </div>
+    );
+  }
+
+  const storyDuration = currentStory.media_type === 'image' ? 5000 : 0; // 5s for images, 0 for videos
+  const overlay = currentStory.text_overlay as any;
+
+  return (
+    <div 
+      className="fixed inset-0 z-[1000] bg-black flex flex-col items-center justify-center select-none"
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp} // Also pause if mouse leaves
+    >
+            {/* Click-through wrapper for navigation */}
+      <div 
+        className="absolute inset-0 z-20"
+        onClick={handleClickNavigation}
+      />
+      
+      {/* Top Bar: Progress & User Info */}
+      <div className="absolute top-0 left-0 w-full p-3 z-30">
+        {/* Progress Bars */}
+        <div className="flex space-x-1 mb-2">
+          {currentUser.statuses.map((story, idx) => (
+            <StoryProgressBar
+              key={story.id}
+              duration={story.media_type === 'image' ? 5000 : 0} // Videos are handled by `onEnded`
+              isActive={idx === currentStoryIndex}
+              isPaused={isPaused || isLoading}
+              onFinished={() => {
+                if(story.media_type === 'image') goToNextStory();
+              }}
+            />
+          ))}
+        </div>
+        
+        {/* User Info */}
+        <div className="flex items-center gap-3">
+          <img 
+            src={currentUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.username}`}
+            className="w-10 h-10 rounded-full"
+            alt={currentUser.display_name}
+          />
+          <div className="flex flex-col">
+            <span className="text-white font-bold text-sm">{currentUser.display_name}</span>
+            <span className="text-white/70 text-xs">@{currentUser.username}</span>
           </div>
-        ))}
+        </div>
       </div>
+      
+      <button onClick={onClose} className="absolute top-4 right-4 z-40 text-white p-2 bg-black/30 rounded-full">
+        <X size={24} />
+      </button>
 
-      {/* User Info */}
-      <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+      {/* Media Content */}
+      <div className="relative flex-1 w-full max-w-lg max-h-screen flex items-center justify-center overflow-hidden">
+        {/* Loading Spinner */}
+        {isLoading && (
+           <div className="absolute z-10">
+             <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+           </div>
+        )}
+        
+        {/* Image */}
         <img 
-          src={current.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${current.profiles?.username}`}
-          className="w-8 h-8 rounded-full"
-          alt={current.profiles?.display_name}
+          src={currentStory.media_type === 'image' ? currentStory.media_url : ''} 
+          className={`max-w-full max-h-full object-contain transition-opacity ${currentStory.media_type === 'image' ? 'opacity-100' : 'opacity-0'}`} 
+          alt="Status" 
         />
-        <span className="text-white font-bold">{current.profiles?.display_name}</span>
-        <span className="text-white/70 text-sm">{formatTime(current.created_at)}</span>
-      </div>
+        
+        {/* Video */}
+        <video
+          ref={videoRef}
+          className={`max-w-full max-h-full object-contain transition-opacity ${currentStory.media_type === 'video' ? 'opacity-100' : 'opacity-0'}`}
+          playsInline
+          onEnded={goToNextStory}
+          onCanPlay={() => setIsLoading(false)} // Video is ready
+          onError={() => goToNextStory()} // Skip broken video
+          muted // Autoplay usually requires mute
+        />
 
-      {/* Close Button */}
-      <button onClick={onClose} className="absolute top-4 right-4 z-10 text-white"><X size={24} /></button>
-
-      {/* Media */}
-      <div className="flex-1 flex items-center justify-center relative" onClick={e => e.stopPropagation()}>
-        {current.media_type === 'image' && (
-          <img src={current.media_url} className="max-w-full max-h-full object-contain" alt="Status" />
-        )}
-        {current.media_type === 'video' && (
-          <video src={current.media_url} className="max-w-full max-h-full object-contain" autoPlay muted loop playsInline />
-        )}
-        {showText && overlay.text && (
+        {/* Text Overlay */}
+        {overlay.text && (
           <div 
-            className="absolute text-white p-2 bg-black/50 rounded"
-            style={{ left: `${overlay.x}%`, top: `${overlay.y}%`, fontSize: `${overlay.fontSize}px` }}
+            className="absolute text-white p-2 bg-black/60 rounded"
+            style={{ 
+                left: `${overlay.x || 50}%`, 
+                top: `${overlay.y || 50}%`,
+                transform: `translate(-${overlay.x || 50}%, -${overlay.y || 50}%)`,
+                fontSize: `${overlay.fontSize || 24}px`,
+                color: overlay.color || 'white',
+                textShadow: '0px 0px 8px rgba(0,0,0,0.7)'
+            }}
           >
             {overlay.text}
           </div>
         )}
       </div>
 
-      {/* Navigation Areas */}
-      <div className="absolute left-0 top-0 bottom-0 w-1/3" onClick={handlePrev} />
-      <div className="absolute right-0 top-0 bottom-0 w-1/3" onClick={handleNext} />
-
-      {/* Reply Input at Bottom */}
-      <div className="p-4 bg-black/50">
-        <input type="text" placeholder="Reply..." className="w-full p-2 rounded-full bg-white/10 text-white border-none" />
+      {/* Reply Bar */}
+      <div className="absolute bottom-0 left-0 w-full p-4 z-30">
+        <div className="flex items-center gap-2">
+            <input 
+              type="text" 
+              placeholder={`Reply to ${currentUser.display_name}...`} 
+              className="flex-1 p-3 rounded-full bg-white/20 border border-white/30 text-white placeholder-white/70 outline-none text-sm"
+              onClick={e => e.stopPropagation()} // Stop click from navigating
+              onPointerDown={e => e.stopPropagation()} // Stop press from pausing
+            />
+             <button className="p-3 rounded-full text-white bg-white/20">
+                <Send size={20} />
+            </button>
+        </div>
       </div>
     </div>
   );
 };
 
-// StatusArchive Component
+// =======================================================================
+//  4. STATUS ARCHIVE
+//  (No changes, this component is fine)
+// =======================================================================
 export const StatusArchive: React.FC = () => {
   const { user } = useAuth();
-  const [allStatuses, setAllStatuses] = useState<Status[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<Status | null>(null);
-  const navigate = useNavigate();
+  const [allStatuses, setAllStatuses] = useState<StatusType[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<StatusType | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -542,7 +690,7 @@ export const StatusArchive: React.FC = () => {
     fetchAll();
   }, [user]);
 
-  const openArchiveViewer = (status: Status) => setSelectedStatus(status);
+  const openArchiveViewer = (status: StatusType) => setSelectedStatus(status);
 
   if (allStatuses.length === 0) {
     return (
@@ -564,7 +712,7 @@ export const StatusArchive: React.FC = () => {
             ) : (
               <video src={status.media_url} className="w-full aspect-square object-cover rounded" muted />
             )}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-end p-2 rounded">
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-end p-2 rounded transition-opacity">
               <span className="text-white text-sm truncate">{new Date(status.created_at).toLocaleDateString()}</span>
             </div>
           </div>
@@ -573,14 +721,14 @@ export const StatusArchive: React.FC = () => {
 
       {/* Simple Viewer Modal */}
       {selectedStatus && (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center p-4" onClick={() => setSelectedStatus(null)}>
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setSelectedStatus(null)}>
           <div className="relative w-full max-w-md" onClick={e => e.stopPropagation()}>
             {selectedStatus.media_type === 'image' ? (
               <img src={selectedStatus.media_url} className="w-full rounded" alt="Full" />
             ) : (
-              <video src={selectedStatus.media_url} className="w-full rounded" controls muted playsInline />
+              <video src={selectedStatus.media_url} className="w-full rounded" controls autoPlay muted playsInline />
             )}
-            <button onClick={() => setSelectedStatus(null)} className="absolute top-2 right-2 text-white"><X size={24} /></button>
+            <button onClick={() => setSelectedStatus(null)} className="absolute -top-10 right-0 text-white p-2"><X size={24} /></button>
           </div>
         </div>
       )}
@@ -588,7 +736,17 @@ export const StatusArchive: React.FC = () => {
   );
 };
 
-// StatusSidebar Component
+// =======================================================================
+//  5. STATUS SIDEBAR
+//  (No changes, this component is fine)
+// =======================================================================
+interface StatusSidebarProps {
+  show: boolean;
+  onClose: () => void;
+  setView: (view: any) => void;
+  view: string;
+}
+
 export const StatusSidebar: React.FC<StatusSidebarProps> = ({ show, onClose, setView, view }) => {
   const menuItems = [
     { icon: <Home size={20} />, label: 'Home', view: 'feed', onClick: () => { setView('feed'); onClose(); } },
@@ -597,6 +755,12 @@ export const StatusSidebar: React.FC<StatusSidebarProps> = ({ show, onClose, set
 
   return (
     <>
+      {/* Backdrop */}
+      <div 
+        className={`fixed inset-0 bg-black/50 z-[98] transition-opacity ${show ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
+        onClick={onClose} 
+      />
+      {/* Sidebar */}
       <div className={`fixed left-0 top-0 h-full w-64 bg-[rgb(var(--color-surface))] border-r border-[rgb(var(--color-border))] z-[99] ${show ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 shadow-lg flex-shrink-0`}>
         <nav className="p-4 space-y-2 h-full flex flex-col">
           {menuItems.map((item, idx) => (
@@ -605,7 +769,7 @@ export const StatusSidebar: React.FC<StatusSidebarProps> = ({ show, onClose, set
               onClick={item.onClick}
               className={`w-full flex items-center space-x-3 p-3 rounded-lg transition ${
                 view === item.view
-                  ? 'bg-[rgba(var(--color-primary),0.1)] text-[rgb(var(--color-primary))]'
+                  ? 'bg-[rgba(var(--color-primary),0.1)] text-[rgb(var(--color-primary))] font-bold'
                   : 'text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))]'
               }`}
             >
@@ -615,33 +779,56 @@ export const StatusSidebar: React.FC<StatusSidebarProps> = ({ show, onClose, set
           ))}
         </nav>
       </div>
-      {show && <div className="fixed inset-0 bg-black/50 z-[98]" onClick={onClose} />}
     </>
   );
 };
 
-// Global Modals (attach to window for cross-component)
+// =======================================================================
+//  6. GLOBAL MODAL CONTAINER
+//  Upgraded to handle the new queue-based viewer data.
+// =======================================================================
 export const Status: React.FC = () => {
   const [showCreator, setShowCreator] = useState(false);
-  const [viewerUserId, setViewerUserId] = useState<string | null>(null);
+  
+  // State now holds the *entire queue* and the *start ID*
+  const [viewerData, setViewerData] = useState<{
+    users: ProfileWithStatus[];
+    initialUserId: string;
+  } | null>(null);
 
   useEffect(() => {
     const handleOpenCreator = () => setShowCreator(true);
-    const handleOpenViewer = (e: any) => setViewerUserId(e.detail.userId);
+    
+    const handleOpenViewer = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail && detail.users && detail.initialUserId) {
+        setViewerData({
+          users: detail.users,
+          initialUserId: detail.initialUserId
+        });
+      }
+    };
 
     window.addEventListener('openStatusCreator', handleOpenCreator);
-    window.addEventListener('openStatusViewer', handleOpenViewer as EventListener);
+    window.addEventListener('openStatusViewer', handleOpenViewer);
 
     return () => {
       window.removeEventListener('openStatusCreator', handleOpenCreator);
-      window.removeEventListener('openStatusViewer', handleOpenViewer as EventListener);
+      window.removeEventListener('openStatusViewer', handleOpenViewer);
     };
   }, []);
 
   return (
-    <>
+    <Fragment>
       {showCreator && <StatusCreator onClose={() => setShowCreator(false)} />}
-      {viewerUserId && <StatusViewer userId={viewerUserId} onClose={() => setViewerUserId(null)} />}
-    </>
+      
+      {viewerData && (
+        <StatusViewer
+          allStatusUsers={viewerData.users}
+          initialUserId={viewerData.initialUserId}
+          onClose={() => setViewerData(null)}
+        />
+      )}
+    </Fragment>
   );
 };
