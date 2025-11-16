@@ -2,7 +2,7 @@
 easy-to-host social platforms for everyone
 
 ```
-Current version: 1.0.7E
+Current version: 1.0.8
 ```
 
 ### What makes LiaoTian (LT) so special from already existing social media/networking platforms?
@@ -49,6 +49,8 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 - [x] Platform data statistics page (accessible on [/stats](https://liaoverse.xyz/stats))
 - [x] Voice messages
 - [x] Web visitor analytics via Vercel
+- [x] Posting on Status (similar to FB/IG story) + view detecting and replying via Messages logic
+- [x] Status archive
 - [ ] Embed links
 - [ ] Create and manage groups
 - [ ] Posting long-form content, e.g. blogs
@@ -62,7 +64,6 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 - [ ] Groupchat functionality with 2 modes - singular channel (like WhatsApp, Messenger, Telegram) or multi channel (like Discord, Slack, Matrix).
 - [ ] Add Discord-like activity detection for desktop client by identifying window titles or otherwise, for showing what game users are currently playing, etc.
 - [ ] Add more sidebars for navigation to further secondary sections (Discover, Groups, Users, Trends).
-- [ ] IG status/story (combine with the chat bubble thing floating above the avatar ring)
 - [ ] Link-in-bio builder
 - [ ] Live streaming (from story? like early IG?)
 
@@ -74,6 +75,7 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 - [ ] Messaging section soft errors (406, 4XX)
 - [ ] message replies don't show text content for some reason
 - [ ] audio and video calling may require a turn server
+- [ ] posting video type Status gets skipped/crashes
 
 ---
 
