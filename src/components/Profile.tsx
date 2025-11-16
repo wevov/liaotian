@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send, LayoutGrid, Grid, ThumbsUp } from 'lucide-react';
+import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send, LayoutGrid, Grid, ThumbsUp, Play, Pause } from 'lucide-react';
 
 // Define the type for the crop result, simplifying for this context
 type CropResult = {
@@ -34,6 +34,113 @@ interface Liker {
     verified: boolean;
   };
 }
+
+interface AudioPlayerProps {
+  src: string;
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  // Use fixed accent colors for the player in the feed context
+  const primaryColor = 'rgb(var(--color-accent))';
+  const trackColor = 'rgb(var(--color-border))';
+  
+  const formatTime = (time: number): string => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const setAudioData = () => {
+      setDuration(audio.duration);
+      setCurrentTime(audio.currentTime);
+    };
+
+    const setAudioTime = () => setCurrentTime(audio.currentTime);
+
+    const togglePlay = () => setIsPlaying(!audio.paused);
+
+    audio.addEventListener('loadedmetadata', setAudioData);
+    audio.addEventListener('timeupdate', setAudioTime);
+    audio.addEventListener('play', togglePlay);
+    audio.addEventListener('pause', togglePlay);
+    audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        audio.currentTime = 0; // Reset after playing
+    });
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', setAudioData);
+      audio.removeEventListener('timeupdate', setAudioTime);
+      audio.removeEventListener('play', togglePlay);
+      audio.removeEventListener('pause', togglePlay);
+      audio.removeEventListener('ended', () => {});
+    };
+  }, []);
+
+  const handlePlayPause = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      if (isPlaying) {
+        audio.pause();
+      } else {
+        audio.play();
+      }
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2 w-full max-w-full p-2 bg-[rgb(var(--color-surface-hover))] rounded-xl">
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      
+      <button 
+        onClick={handlePlayPause}
+        className={`flex-shrink-0 p-2 rounded-full transition-colors`}
+        style={{
+            backgroundColor: 'rgb(var(--color-accent))', 
+            color: 'rgb(var(--color-text-on-primary))',
+        }}
+      >
+        {isPlaying ? <Pause size={16} fill="rgb(var(--color-text-on-primary))" /> : <Play size={16} fill="rgb(var(--color-text-on-primary))" />}
+      </button>
+
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <input
+          type="range"
+          min="0"
+          max={duration}
+          step="0.01"
+          value={currentTime}
+          onChange={handleSeek}
+          className="w-full h-1 appearance-none rounded-full cursor-pointer transition"
+          style={{
+            background: `linear-gradient(to right, ${primaryColor} 0%, ${primaryColor} ${((currentTime / duration) * 100) || 0}%, ${trackColor} ${((currentTime / duration) * 100) || 0}%, ${trackColor} 100%)`,
+          }}
+        />
+        <span className="text-xs flex-shrink-0 text-[rgb(var(--color-text-secondary))]">
+          {formatTime(currentTime)}/{formatTime(duration)}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 // --- START: CROP UTILITY FUNCTIONS (In a real app, these would be in a separate utility file) ---
 
@@ -382,38 +489,57 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
     }
   }, [user]); // Added user dependency
 
-  const handleToggleLike = async (post: Post) => {
+  const handleLikeInteraction = async (post: Post) => {
     if (!user) return;
-    const isLiked = likedPostIds.has(post.id);
-    
-    // Optimistic Update
-    const newSet = new Set(likedPostIds);
-    if (isLiked) newSet.delete(post.id);
-    else newSet.add(post.id);
-    setLikedPostIds(newSet);
 
-    // Update the 'posts' list
-    setPosts(current => current.map(p => {
-      if (p.id === post.id) {
-        return { ...p, like_count: isLiked ? (p.like_count - 1) : (p.like_count + 1) };
-      }
-      return p;
-    }));
-    
-    // Also update the 'likedPosts' list
-    setLikedPosts(current => current.map(p => {
-      if (p.id === post.id) {
-        return { ...p, like_count: isLiked ? (p.like_count - 1) : (p.like_count + 1) };
-      }
-      return p;
-    }));
+    // 1. If the user hasn't liked it yet, apply the like immediately
+    if (!likedPostIds.has(post.id)) {
+        const newSet = new Set(likedPostIds);
+        newSet.add(post.id);
+        setLikedPostIds(newSet);
 
-    // DB Update
-    if (isLiked) {
-      await supabase.from('likes').delete().match({ user_id: user.id, entity_id: post.id, entity_type: 'post' });
-    } else {
-      await supabase.from('likes').insert({ user_id: user.id, entity_id: post.id, entity_type: 'post' });
+        // Optimistic UI Update - for both lists
+        setPosts(current => current.map(p => {
+            if (p.id === post.id) return { ...p, like_count: (p.like_count + 1) };
+            return p;
+        }));
+        setLikedPosts(current => current.map(p => {
+            if (p.id === post.id) return { ...p, like_count: (p.like_count + 1) };
+            return p;
+        }));
+
+        // DB Insert
+        await supabase.from('likes').insert({ user_id: user.id, entity_id: post.id, entity_type: 'post' });
     }
+
+    // 2. Open the modal
+    openLikesList(post.id);
+  };
+
+  // New function to remove like ONLY from the modal
+  const handleRemoveLikeFromModal = async (postId: string) => {
+      if (!user) return;
+
+      // Optimistic UI Update
+      const newSet = new Set(likedPostIds);
+      newSet.delete(postId);
+      setLikedPostIds(newSet);
+
+      // Update both lists
+      setPosts(current => current.map(p => {
+          if (p.id === postId) return { ...p, like_count: Math.max(0, p.like_count - 1) };
+          return p;
+      }));
+      setLikedPosts(current => current.map(p => {
+          if (p.id === postId) return { ...p, like_count: Math.max(0, p.like_count - 1) };
+          return p;
+      }));
+
+      // Remove user from the displayed list immediately
+      setLikersList(prev => prev.filter(liker => liker.user_id !== user.id));
+
+      // DB Delete
+      await supabase.from('likes').delete().match({ user_id: user.id, entity_id: postId, entity_type: 'post' });
   };
 
   const openLikesList = async (postId: string) => {
@@ -1114,6 +1240,11 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                                     Your browser does not support the video tag.
                                   </video>
                                 )}
+                                {post.media_type === 'audio' && (
+                                    <div className="rounded-2xl w-full">
+                                        <AudioPlayer src={post.media_url} />
+                                    </div>
+                                )}
                                 {post.media_type === 'document' && (
                                   <a
                                     href={post.media_url}
@@ -1131,7 +1262,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                     <div className="flex items-center gap-6 mt-3">
                         <div className="flex items-center gap-1 group">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleToggleLike(post); }}
+                            onClick={(e) => { e.stopPropagation(); handleLikeInteraction(post); }}
                             className={`p-2 rounded-full transition ${
                               likedPostIds.has(post.id) 
                                 ? 'text-pink-500 bg-pink-500/10' 
@@ -1292,6 +1423,11 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                                     Your browser does not support the video tag.
                                   </video>
                                 )}
+                                {post.media_type === 'audio' && (
+                                    <div className="rounded-2xl w-full">
+                                        <AudioPlayer src={post.media_url} />
+                                    </div>
+                                )}
                                 {post.media_type === 'document' && (
                                   <a
                                     href={post.media_url}
@@ -1308,7 +1444,7 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                     <div className="flex items-center gap-6 mt-3">
                         <div className="flex items-center gap-1 group">
                           <button 
-                            onClick={(e) => { e.stopPropagation(); handleToggleLike(post); }}
+                            onClick={(e) => { e.stopPropagation(); handleLikeInteraction(post); }}
                             className={`p-2 rounded-full transition ${
                               likedPostIds.has(post.id) 
                                 ? 'text-pink-500 bg-pink-500/10' 
@@ -1583,20 +1719,32 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                  <p className="text-center text-[rgb(var(--color-text-secondary))]">No likes yet.</p>
               ) : (
                 likersList.map((liker, idx) => (
-                  <div key={`${liker.user_id}-${idx}`} className="flex items-center gap-3">
-                    <img 
-                       src={liker.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${liker.profiles?.username}`}
-                       className="w-10 h-10 rounded-full cursor-pointer"
-                       alt="Avatar"
-                       onClick={() => goToProfile(liker.user_id)}
-                    />
-                    <div className="flex-1">
-                      <button onClick={() => goToProfile(liker.user_id)} className="font-bold hover:underline text-[rgb(var(--color-text))] text-sm block">
-                        {liker.profiles?.display_name}
-                        {liker.profiles?.verified && <BadgeCheck size={14} className="inline ml-1 text-[rgb(var(--color-accent))]" />}
-                      </button>
-                      <span className="text-sm text-[rgb(var(--color-text-secondary))]">@{liker.profiles?.username}</span>
+                  <div key={`${liker.user_id}-${idx}`} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <img 
+                        src={liker.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${liker.profiles?.username}`}
+                        className="w-10 h-10 rounded-full cursor-pointer"
+                        alt="Avatar"
+                        onClick={() => goToProfile(liker.user_id)}
+                        />
+                        <div>
+                        <button onClick={() => goToProfile(liker.user_id)} className="font-bold hover:underline text-[rgb(var(--color-text))] text-sm block">
+                            {liker.profiles?.display_name}
+                            {liker.profiles?.verified && <BadgeCheck size={14} className="inline ml-1 text-[rgb(var(--color-accent))]" />}
+                        </button>
+                        <span className="text-sm text-[rgb(var(--color-text-secondary))]">@{liker.profiles?.username}</span>
+                        </div>
                     </div>
+                    {/* Requirement: Unliking is only possible from here */}
+                    {liker.user_id === user?.id && (
+                        <button 
+                            onClick={() => handleRemoveLikeFromModal(activeLikesModal!)}
+                            className="p-2 rounded-full bg-red-50 text-red-500 hover:bg-red-100 transition"
+                            title="Remove Like"
+                        >
+                            <Heart size={16} className="fill-current" />
+                        </button>
+                    )}
                   </div>
                 ))
               )}
