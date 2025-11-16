@@ -883,76 +883,35 @@ export const Messages = () => {
                       );
                     })()}
 
-                    {/* --- NEW STORY REPLY LOGIC --- */}
-                    {(() => {
-                      const isStoryReply = msg.media_url && msg.content.trim() && (msg.media_type === 'image' || msg.media_type === 'video');
-                      const isOutgoing = msg.sender_id === user!.id;
-                    
-                      if (isStoryReply) {
-                        return (
-                          <div className="relative w-48 rounded-lg overflow-hidden my-1">
-                            {/* Media preview for story reply */}
-                            {msg.media_type === 'image' && (
-                              <img src={msg.media_url} className="w-full h-32 object-cover" alt="Story reply" />
-                            )}
-                            {msg.media_type === 'video' && (
-                              <video src={msg.media_url} className="w-full h-32 object-cover" muted />
-                            )}
-                            {/* Dark overlay */}
-                            <div className="absolute inset-0 bg-black/40" />
-                    
-                            {/* "Replied to story" text */}
-                            <div className="absolute top-2 left-2 text-white text-xs font-bold">
-                              Replied to story
-                            </div>
-                    
-                            {/* The reply text */}
-                            <p className="absolute bottom-2 left-2 right-2 text-white text-sm font-medium truncate">
-                              {msg.content}
-                            </p>
+                    {msg.media_url && (
+                      <div className={msg.content.trim() ? "mt-2" : ""}>
+                        {msg.media_type === 'image' && (
+                          <img src={msg.media_url} className={`${msg.content.trim() ? "mb-2" : ""} rounded-lg max-w-full h-auto`} alt="Message" />
+                        )}
+                        {msg.media_type === 'video' && (
+                          <video controls className={`${msg.content.trim() ? "mb-2" : ""} rounded-lg max-w-full`}>
+                            <source src={msg.media_url} />
+                          </video>
+                        )}
+                        {/* CUSTOM AUDIO PLAYER IMPLEMENTATION */}
+                        {msg.media_type === 'audio' && (
+                          <div className={msg.content.trim() ? "mb-2" : ""}>
+                            <AudioPlayer src={msg.media_url} isOutgoing={msg.sender_id === user!.id} />
                           </div>
-                        );
-                      }
-                    
-                      // --- ORIGINAL MEDIA LOGIC (if not a story reply) ---
-                      return (
-                        <>
-                          {msg.media_url && (
-                            <div className={msg.content.trim() ? "mt-2" : ""}>
-                              {msg.media_type === 'image' && (
-                                <img src={msg.media_url} className={`${msg.content.trim() ? "mb-2" : ""} rounded-lg max-w-full h-auto`} alt="Message" />
-                              )}
-                              {msg.media_type === 'video' && (
-                                <video controls className={`${msg.content.trim() ? "mb-2" : ""} rounded-lg max-w-full`}>
-                                  <source src={msg.media_url} />
-                                </video>
-                              )}
-                              {msg.media_type === 'audio' && (
-                                <div className={msg.content.trim() ? "mb-2" : ""}>
-                                  <AudioPlayer src={msg.media_url} isOutgoing={isOutgoing} />
-                                </div>
-                              )}
-                              {msg.media_type === 'document' && (
-                                <a
-                                  href={msg.media_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-sm text-[rgb(var(--color-primary))] underline"
-                                >
-                                  <FileText size={14} /> Open File
-                                </a>
-                              )}
-                            </div>
-                          )}
-                          {/* Only render content if it's NOT a story reply OR if there's no media */}
-                          {(!isStoryReply && msg.content) && (
-                             <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
-                          )}
-                        </>
-                      );
-                    })()}
-                    {/* --- END OF NEW LOGIC --- */}
-                    
+                        )}
+                        {msg.media_type === 'document' && (
+                          <a
+                            href={msg.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-[rgb(var(--color-primary))] underline"
+                          >
+                            <FileText size={14} /> Open File
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    <p className="whitespace-pre-wrap break-words text-sm">{msg.content}</p>
                     <span
                       className={`text-[10px] block mt-1.5 text-right ${
                         msg.sender_id === user!.id ? 'text-[rgba(var(--color-text-on-primary),0.9)]' : 'text-[rgb(var(--color-text-secondary))]'
