@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase, Profile as ProfileType, Post, uploadMedia } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send, LayoutGrid, Grid, ThumbsUp } from 'lucide-react';
+import { BadgeCheck, Edit2, Check, MessageCircle, X, UserMinus, Paperclip, FileText, Settings as SettingsIcon, MoreVertical, Trash2, Camera, Crop, Heart, Link, Send, LayoutGrid, Grid, ThumbsUp, Play, Pause } from 'lucide-react';
 
 // Define the type for the crop result, simplifying for this context
 type CropResult = {
@@ -34,6 +34,113 @@ interface Liker {
     verified: boolean;
   };
 }
+
+interface AudioPlayerProps {
+  src: string;
+}
+
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ src }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  // Use fixed accent colors for the player in the feed context
+  const primaryColor = 'rgb(var(--color-accent))';
+  const trackColor = 'rgb(var(--color-border))';
+  
+  const formatTime = (time: number): string => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const setAudioData = () => {
+      setDuration(audio.duration);
+      setCurrentTime(audio.currentTime);
+    };
+
+    const setAudioTime = () => setCurrentTime(audio.currentTime);
+
+    const togglePlay = () => setIsPlaying(!audio.paused);
+
+    audio.addEventListener('loadedmetadata', setAudioData);
+    audio.addEventListener('timeupdate', setAudioTime);
+    audio.addEventListener('play', togglePlay);
+    audio.addEventListener('pause', togglePlay);
+    audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        audio.currentTime = 0; // Reset after playing
+    });
+
+    return () => {
+      audio.removeEventListener('loadedmetadata', setAudioData);
+      audio.removeEventListener('timeupdate', setAudioTime);
+      audio.removeEventListener('play', togglePlay);
+      audio.removeEventListener('pause', togglePlay);
+      audio.removeEventListener('ended', () => {});
+    };
+  }, []);
+
+  const handlePlayPause = () => {
+    const audio = audioRef.current;
+    if (audio) {
+      if (isPlaying) {
+        audio.pause();
+      } else {
+        audio.play();
+      }
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const time = parseFloat(e.target.value);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = time;
+      setCurrentTime(time);
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2 w-full max-w-full p-2 bg-[rgb(var(--color-surface-hover))] rounded-xl">
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      
+      <button 
+        onClick={handlePlayPause}
+        className={`flex-shrink-0 p-2 rounded-full transition-colors`}
+        style={{
+            backgroundColor: 'rgb(var(--color-accent))', 
+            color: 'rgb(var(--color-text-on-primary))',
+        }}
+      >
+        {isPlaying ? <Pause size={16} fill="rgb(var(--color-text-on-primary))" /> : <Play size={16} fill="rgb(var(--color-text-on-primary))" />}
+      </button>
+
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <input
+          type="range"
+          min="0"
+          max={duration}
+          step="0.01"
+          value={currentTime}
+          onChange={handleSeek}
+          className="w-full h-1 appearance-none rounded-full cursor-pointer transition"
+          style={{
+            background: `linear-gradient(to right, ${primaryColor} 0%, ${primaryColor} ${((currentTime / duration) * 100) || 0}%, ${trackColor} ${((currentTime / duration) * 100) || 0}%, ${trackColor} 100%)`,
+          }}
+        />
+        <span className="text-xs flex-shrink-0 text-[rgb(var(--color-text-secondary))]">
+          {formatTime(currentTime)}/{formatTime(duration)}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 // --- START: CROP UTILITY FUNCTIONS (In a real app, these would be in a separate utility file) ---
 
@@ -1133,6 +1240,11 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                                     Your browser does not support the video tag.
                                   </video>
                                 )}
+                                {post.media_type === 'audio' && (
+                                    <div className="rounded-2xl w-full">
+                                        <AudioPlayer src={post.media_url} />
+                                    </div>
+                                )}
                                 {post.media_type === 'document' && (
                                   <a
                                     href={post.media_url}
@@ -1310,6 +1422,11 @@ export const Profile = ({ userId, onMessage, onSettings }: { userId?: string; on
                                     <source src={post.media_url} />
                                     Your browser does not support the video tag.
                                   </video>
+                                )}
+                                {post.media_type === 'audio' && (
+                                    <div className="rounded-2xl w-full">
+                                        <AudioPlayer src={post.media_url} />
+                                    </div>
                                 )}
                                 {post.media_type === 'document' && (
                                   <a
