@@ -411,6 +411,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Main />
+		<Status />
         <Analytics/>
       </BrowserRouter>
     </AuthProvider>
