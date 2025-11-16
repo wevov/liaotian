@@ -34,6 +34,32 @@ export const Shots = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Copied from Feed.tsx
+  const getPostCounts = useCallback(async (postIds: string[]) => {
+    if (!postIds.length) return { likeCounts: {}, commentCounts: {} };
+
+    const likeCounts: Record<string, number> = {};
+    const commentCounts: Record<string, number> = {};
+
+    for (const postId of postIds) {
+      const [{ count: likeCount }, { count: commentCount }] = await Promise.all([
+        supabase
+          .from('likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('entity_type', 'post')
+          .eq('entity_id', postId),
+        supabase
+          .from('comments')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', postId)
+      ]);
+      likeCounts[postId] = likeCount || 0;
+      commentCounts[postId] = commentCount || 0;
+    }
+
+    return { likeCounts, commentCounts };
+  }, []);
   
   // Interaction States
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
@@ -80,10 +106,21 @@ export const Shots = () => {
 
     const { data } = await query;
     const loadedVideos = data || [];
-    setVideos(loadedVideos);
-    fetchUserLikes(loadedVideos);
+
+    // --- ADDED LIKES/COMMENTS COUNT FETCHING ---
+    const postIds = loadedVideos.map(p => p.id);
+    const { likeCounts, commentCounts } = await getPostCounts(postIds);
+    const videosWithCounts = loadedVideos.map(video => ({
+      ...video,
+      like_count: likeCounts[video.id] || 0,
+      comment_count: commentCounts[video.id] || 0,
+    }));
+    // --- END ---
+
+    setVideos(videosWithCounts);
+    fetchUserLikes(videosWithCounts);
     setLoading(false);
-  }, [user, fetchUserLikes]);
+  }, [user, fetchUserLikes, getPostCounts]);
 
   useEffect(() => {
     loadVideos();
