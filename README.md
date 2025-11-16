@@ -12,7 +12,7 @@ Unlike Mastodon and other open-source and decentralized or fediverse alternative
 Also to get started on developing your own version of LiaoTian, it's much simpler than most other "templates" out there, since it uses **only 7 files** for its actual codebase (as of now).
 
 ## 👤 Use LiaoTian itself
-If you just want to create an account on **LiaoTian** (our official deployment) then [sign up here](https://liaotian.mux8.com/).
+If you just want to create an account on **Liaoverse** (our official deployment) then [sign up here](https://liaoverse.xyz/).
 
 ## 🌐 Host your own LiaoTian
 1. Fork this repository to your GitHub account.
