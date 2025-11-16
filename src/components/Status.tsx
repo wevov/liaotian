@@ -1,6 +1,6 @@
 // src/components/Status.tsx
 import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react';
-import { supabase, uploadStatusMedia, Profile, Status as StatusType } from '../lib/supabase';
+import { supabase, uploadStatusMedia, Profile, BadgeCheck, Status as StatusType } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   X, 
