@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase, uploadStatusMedia, Profile, Status } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { X, Plus, Camera, Video, Image as ImageIcon, Edit3, Menu, ChevronLeft, ChevronRight, Clock, Archive, MessageSquare, User, Settings } from 'lucide-react';
+import { X, Plus, Camera, Video, Image as ImageIcon, Edit3, ChevronLeft, ChevronRight, Clock, Archive, Menu } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const FOLLOW_ONLY_FEED = import.meta.env.VITE_FOLLOW_ONLY_FEED === 'true';
@@ -496,23 +496,16 @@ export const StatusSidebar: React.FC<StatusSidebarProps> = ({ show, onClose, set
 
   const menuItems = [
     { icon: <Menu size={20} />, label: 'Home', view: 'feed', onClick: () => { setView('feed'); if (isMobile) onClose(); } },
-    { icon: <MessageSquare size={20} />, label: 'Messages', view: 'messages', onClick: () => { setView('messages'); if (isMobile) onClose(); } },
-    { icon: <User size={20} />, label: 'Profile', view: 'profile', onClick: () => { setView('profile'); if (isMobile) onClose(); } },
-    { icon: <Settings size={20} />, label: 'Settings', view: 'settings', onClick: () => { setView('settings'); if (isMobile) onClose(); } },
     { icon: <Archive size={20} />, label: 'Status Archive', view: 'archive', onClick: () => { setView('archive'); if (isMobile) onClose(); } },
   ];
 
   return (
     <div className={`
-      fixed left-0 top-0 h-full w-64 bg-[rgb(var(--color-surface))] border-r border-[rgb(var(--color-border))] z-[99]
-      ${isMobile ? (show ? 'translate-x-0' : '-translate-x-full') : 'translate-x-0'}
-      transition-transform duration-300 shadow-lg
+      ${isMobile ? 'fixed' : 'relative'} left-0 top-0 h-full w-64 bg-[rgb(var(--color-surface))] border-r border-[rgb(var(--color-border))] z-[99]
+      ${isMobile ? (show ? 'translate-x-0' : '-translate-x-full') : ''}
+      transition-transform duration-300 shadow-lg flex-shrink-0
     `}>
-      <div className="p-4 border-b border-[rgb(var(--color-border))]">
-        <h1 className="text-xl font-bold text-[rgb(var(--color-text))]">Liaoverse</h1>
-        {isMobile && <button onClick={onClose} className="mt-2 p-2 hover:bg-[rgb(var(--color-surface-hover))] rounded"><X size={20} /></button>}
-      </div>
-      <nav className="p-4 space-y-2">
+      <nav className="p-4 space-y-2 flex-1">
         {menuItems.map((item, idx) => (
           <button
             key={idx}
