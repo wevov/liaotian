@@ -379,9 +379,17 @@ if (loading) {
         <div className="min-h-screen bg-[rgb(var(--color-background))]">
           <div className="bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] sticky top-0 z-50 shadow-sm">
             <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-              <h1 className="text-l font-black bg-gradient-to-r from-[rgba(var(--color-primary),1)] via-[rgba(var(--color-accent),1)] to-[rgba(var(--color-primary),1)] bg-clip-text text-transparent">
-                Liaoverse
-              </h1>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox={SVG_VIEWBOX}
+                className="h-6 w-auto cursor-pointer"
+                onClick={() => navigate('/')}
+              >
+                <path
+                  d={SVG_PATH}
+                  fill="rgb(var(--color-primary))"
+                />
+              </svg>
               <a href="/" className="text-[rgb(var(--color-primary))] hover:text-[rgba(var(--color-primary),0.8)] font-bold">
                 ← Back to Home
               </a>
@@ -437,9 +445,17 @@ if (loading) {
     <div className="min-h-screen bg-[rgb(var(--color-background))]">
       <nav className="bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))] sticky top-0 z-50 shadow-sm">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 h-14">
-          <h1 className="text-l font-black bg-gradient-to-r from-[rgba(var(--color-primary),1)] via-[rgba(var(--color-accent),1)] to-[rgba(var(--color-primary),1)] bg-clip-text text-transparent">
-            Liaoverse
-          </h1>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox={SVG_VIEWBOX}
+            className="h-6 w-auto cursor-pointer"
+            onClick={() => { setView('feed'); setSelectedProfileId(undefined); navigate('/'); }}
+          >
+            <path
+              d={SVG_PATH}
+              fill="rgb(var(--color-primary))"
+            />
+          </svg>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowSearch(true)}
