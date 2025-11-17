@@ -28,13 +28,36 @@ const FOLLOW_ONLY_FEED = import.meta.env.VITE_FOLLOW_ONLY_FEED === 'true';
 
 // =======================================================================
 //  1. STATUS TRAY
-//  Updated with "Unseen" logic.
+//  Updated with "Unseen" logic & Upload Progress Bar on own avatar.
 // =======================================================================
 
 export const StatusTray: React.FC = () => {
   const { user, profile } = useAuth();
   const [statusUsers, setStatusUsers] = useState<ProfileWithStatus[]>([]);
   const [ownStatus, setOwnStatus] = useState<ProfileWithStatus | null>(null);
+  // ADDED: State for upload progress for the new feature
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null); // null means not uploading
+
+  // ADDED: Effect to handle upload progress updates
+  useEffect(() => {
+    const handleProgress = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const progress = detail.progress as number;
+      
+      if (progress === 100) {
+        // Upload finished. Give it a moment for the DB to update/fetch to happen, then clear.
+        setTimeout(() => setUploadProgress(null), 1000); 
+      } else {
+        setUploadProgress(progress);
+      }
+    };
+    
+    window.addEventListener('statusUploadProgress', handleProgress as EventListener);
+    
+    return () => {
+      window.removeEventListener('statusUploadProgress', handleProgress as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (!user || !profile) return;
@@ -153,16 +176,31 @@ export const StatusTray: React.FC = () => {
 
   if (!user) return null;
 
-  // NEW: Ring rendering logic (FIXED)
+  // UPDATED: Ring rendering logic to include upload progress
   const renderRing = (user: ProfileWithStatus) => {
     const hasStatus = user.statuses.length > 0;
     
     if (user.id === profile?.id) {
-        // --- OWN RING ---
+        // --- OWN RING (Progress Bar / Existing Status / No Status) ---
+        // 1. Progress Ring (for upload)
+        if (uploadProgress !== null && uploadProgress < 100) {
+            // Use conic gradient to simulate progress.
+            return (
+                <div 
+                    className="absolute inset-0 rounded-full p-[2px] -z-10"
+                    style={{
+                        background: `conic-gradient(rgb(var(--color-primary)) ${uploadProgress}%, rgb(var(--color-border)) ${uploadProgress}%)`
+                    }}
+                />
+            );
+        }
+
+        // 2. Existing Status Ring (Gray)
         if (hasStatus) {
             // Show a plain gray ring if you have a status (like IG)
             return <div className={`absolute inset-0 rounded-full p-[2px] -z-10 bg-[rgb(var(--color-border))]`} />
         } else {
+            // 3. No Status Ring (Dashed)
             // No status: Dashed ring
             return <div className="absolute inset-0 rounded-full border-2 border-dashed border-[rgb(var(--color-border))] -z-10"/>
         }
@@ -229,6 +267,7 @@ export const StatusTray: React.FC = () => {
 // =======================================================================
 //  2. STATUS CREATOR
 //  Massively upgraded with Camera and Video recording.
+//  UPDATED: Added logic to dispatch upload progress events.
 // =======================================================================
 type CreatorMode = 'upload' | 'camera' | 'video';
 
@@ -399,8 +438,30 @@ const StatusCreator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     if (!user || !mediaFile) return;
 
     setIsPosting(true);
+
+    // --- ADDED: MOCK UPLOAD PROGRESS DISPATCHER ---
+    window.dispatchEvent(new CustomEvent('statusUploadProgress', { detail: { progress: 1 } }));
+    let progress = 1;
+
+    // Simulate file upload progress with an async loop
+    const mockProgress = () => {
+        progress = Math.min(progress + 10, 95); // Stop before 99% for DB write
+        window.dispatchEvent(new CustomEvent('statusUploadProgress', { detail: { progress: progress } }));
+        if (progress < 95) {
+            setTimeout(mockProgress, 300);
+        }
+    };
+    const progressTimeout = setTimeout(mockProgress, 300);
+    // ------------------------------------------------
+
     try {
       const uploadResult = await uploadStatusMedia(mediaFile);
+      
+      // Stop mock progress, set to 99% before final DB write
+      clearTimeout(progressTimeout); 
+      progress = 99;
+      window.dispatchEvent(new CustomEvent('statusUploadProgress', { detail: { progress: progress } }));
+
       if (!uploadResult) throw new Error('Upload failed.');
 
       // --- FIX: Add expires_at timestamp (24 hours from now) ---
@@ -422,10 +483,15 @@ const StatusCreator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           expires_at: expires_at // <-- ADDED
         });
       
+      // Dispatch Complete Progress (100%)
+      window.dispatchEvent(new CustomEvent('statusUploadProgress', { detail: { progress: 100 } }));
+      
       onClose(); // Success
     } catch (error) {
       console.error('Error posting status:', error);
       alert('Failed to post status. Please try again.');
+      // Dispatch Error/Reset Progress (null)
+      window.dispatchEvent(new CustomEvent('statusUploadProgress', { detail: { progress: null } }));
     } finally {
       setIsPosting(false);
     }
@@ -571,6 +637,7 @@ const StatusCreator: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 // =======================================================================
 //  3. STATUS VIEWER (AND SUB-COMPONENTS)
 //  Upgraded with "Viewed by" list, profile nav, and DM replies.
+//  FIXED: Image centering.
 // =======================================================================
 
 // --- NEW: Time Ago Helper Function ---
@@ -1033,9 +1100,10 @@ const StatusViewer: React.FC<{
            </div>
         )}
         
+        {/* FIXED: Added w-full h-full to image for perfect centering */}
         <img 
           src={currentStory.media_type === 'image' ? currentStory.media_url : ''} 
-          className={`max-w-full max-h-full object-contain transition-opacity ${currentStory.media_type === 'image' ? 'opacity-100' : 'opacity-0'}`} 
+          className={`w-full h-full object-contain transition-opacity ${currentStory.media_type === 'image' ? 'opacity-100' : 'opacity-0'}`} 
           alt="" 
         />
         
@@ -1169,7 +1237,7 @@ export const StatusArchive: React.FC = () => {
             ) : (
               <video src={status.media_url} className="w-full aspect-square object-cover rounded" muted />
             )}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-1G00 flex items-end p-2 rounded transition-opacity">
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-end p-2 rounded transition-opacity">
               <span className="text-white text-sm truncate">{new Date(status.created_at).toLocaleDateString()}</span>
             </div>
           </div>
