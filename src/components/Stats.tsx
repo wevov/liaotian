@@ -648,7 +648,7 @@ export const Stats: React.FC = () => {
 
 
   return (
-    <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-6xl bg-[rgb(var(--color-background))] mx-auto py-8 px-4 sm:px-6 lg:px-8">
       <div className="flex items-center mb-10">
         <h2 className="text-4xl font-extrabold text-[rgb(var(--color-text))] tracking-tight">
           Platform Statistics
