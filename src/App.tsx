@@ -471,7 +471,7 @@ if (loading) {
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox={SVG_VIEWBOX}
-            className="w-[22px] h-[22px] cursor-pointer"
+            className="w-[32px] h-[32px] cursor-pointer"
             onClick={() => { setView('feed'); setSelectedProfileId(undefined); navigate('/'); }}
           >
             <path
