@@ -34,32 +34,34 @@ const Main = () => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false); // For a future modal
+  
+  const [pendingGazeboInvite, setPendingGazeboInvite] = useState<string | null>(null);
 
 	// Auto-join via /invite/:code
 	useEffect(() => {
-	  const match = location.pathname.match(/^\/invite\/([a-zA-Z0-9]{8})$/);
-	  if (match && user) {
-	    const code = match[1];
-	    (async () => {
-	      const { data: gazebo } = await supabase
-	        .from('gazebos')
-	        .select('*')
-	        .eq('invite_code', code)
-	        .single();
-	
-	      if (gazebo) {
-	        await supabase.from('gazebo_members').upsert({
-	          gazebo_id: gazebo.id,
-	          user_id: user.id,
-	          role: 'member'
-	        });
-	        navigate('/messages'); // or a dedicated /gazebo route
-	        // You may want to set activeGazebo via context/event
-	        window.location.reload(); // simple way to refresh list
-	      }
-	    })();
-	  }
-	}, [location, user]);
+    const path = location.pathname;
+    const search = location.search;
+
+    // --- NEW GAZEOB INVITE ROUTING ---
+    if (path.startsWith('/invite/')) {
+        const match = path.match(/^\/invite\/([a-zA-Z0-9-]+)$/);
+        if (match) {
+            const inviteCode = match[1];
+            // Store the invite code and switch to messages view
+            setPendingGazeboInvite(inviteCode);
+            setView('messages');
+            setSelectedProfileId(undefined); // Ensure DM state is clear
+            setPageSlug('');
+            return; // Stop further routing logic
+        }
+    }
+    // ---------------------------------
+
+    // Check for profile paths (/ and /user)
+    if (path === '/' || path === '/user') {
+    // ... existing routing logic
+// ...
+}, [location.pathname, location.search, user]);
 
   // Set theme from profile
   useEffect(() => {
@@ -580,7 +582,14 @@ if (loading) {
 
       <main className="h-[90vh] overflow-auto">
         {view === 'feed' && <Feed />}
-        {view === 'messages' && <Messages />}
+        {view === 'messages' && (
+		    <Messages 
+		        // Pass the invite code down
+		        initialInviteCode={pendingGazeboInvite} 
+		        // A callback for Gazebos to tell App.tsx the code has been processed
+		        onInviteHandled={() => setPendingGazeboInvite(null)} 
+		    />
+		)}
         {view === 'profile' && (
           <Profile
             userId={selectedProfileId}
