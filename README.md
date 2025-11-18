@@ -2,7 +2,7 @@
 easy-to-host social platforms for everyone
 
 ```
-Current version: 1.0.8C
+Current version: 1.0.9
 ```
 
 ### What makes LiaoTian (LT) so special from already existing social media/networking platforms?
@@ -54,6 +54,7 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 - [x] custom SVG loading animations
 - [x] Notification system (with "clear all" button to easily clear from database, too)
 - [x] Message read receipts (checkmarks)
+- [x] Groupchat functionality with 2 modes - singular channel (like WhatsApp, Messenger, Telegram) or multi channel (like Discord, Slack, Matrix).
 - [ ] Embed links
 - [ ] Create and manage groups
 - [ ] Posting long-form content, e.g. blogs
@@ -63,7 +64,6 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 - [ ] Gaming mode (color-changing RGB background)
 - [ ] Sending GIFs via Tenor/Giphy
 - [ ] Privacy settings for posts + "emergency profile shutdown" option to temporarily make only posts have "only me" level privacy.
-- [ ] Groupchat functionality with 2 modes - singular channel (like WhatsApp, Messenger, Telegram) or multi channel (like Discord, Slack, Matrix).
 - [ ] Add Discord-like activity detection for desktop client by identifying window titles or otherwise, for showing what game users are currently playing, etc.
 - [ ] Add more sidebars for navigation to further secondary sections (Discover, Groups, Users, Trends).
 - [ ] Link-in-bio builder
@@ -73,6 +73,7 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 ## 🚨 Current flaws
 - [ ] Cookie “__cf_bm” has been rejected for invalid domain. Browser console error logs sometimes.
 - [ ] audio and video calling may require a turn server
+- [ ] Gazebos lack smooth UI UX + audio message previews missing
 
 ---
 
