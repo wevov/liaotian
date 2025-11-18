@@ -1,6 +1,6 @@
 // src/components/Gazebos.tsx
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase, Profile, Gazebo, GazeboChannel, GazeboMessage, uploadMedia } from '../lib/supabase';
+import { supabase, Profile, Gazebo, GazeboChannel, GazeboMessage, uploadMedia, MessageReaction } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Peer from 'peerjs';
@@ -42,6 +42,7 @@ type AppGazeboMessage = GazeboMessage & {
         media_type?: string;
         sender?: { display_name: string }
     } | null;
+    reactions?: MessageReaction[];
 };
 
 type VoicePeer = {
@@ -144,11 +145,12 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [viewingProfile, setViewingProfile] = useState<Profile | null>(null);
   
-  // Editing & Reply States
+  // Editing & Reply & Reaction States
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editMessageContent, setEditMessageContent] = useState('');
   const [replyingTo, setReplyingTo] = useState<AppGazeboMessage | null>(null);
+  const [showReactionMenuId, setShowReactionMenuId] = useState<string | null>(null);
 
   // Message Input State
   const [content, setContent] = useState('');
@@ -382,7 +384,7 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
                 }
             }
 
-            setMessages(prev => [...prev, { ...newMsg, sender: sender as Profile, reply_to: replyData }]);
+            setMessages(prev => [...prev, { ...newMsg, sender: sender as Profile, reply_to: replyData, reactions: [] }]);
             setTimeout(scrollToBottom, 100);
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gazebo_messages', filter: `channel_id=eq.${activeChannel.id}` }, payload => {
@@ -390,6 +392,25 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
         })
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gazebo_messages', filter: `channel_id=eq.${activeChannel.id}` }, payload => {
             setMessages(prev => prev.filter(m => m.id !== payload.old.id));
+        })
+        // Listen for reactions
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, payload => {
+            const { eventType, new: newRecord, old } = payload;
+            setMessages(prev => prev.map(m => {
+                const msgId = eventType === 'DELETE' ? old.message_id : newRecord.message_id;
+                if (m.id !== msgId) return m;
+
+                const currentReactions = m.reactions || [];
+                if (eventType === 'INSERT') {
+                     // Prevent duplicates in state if rapid fire
+                     if (currentReactions.some(r => r.id === newRecord.id)) return m;
+                     return { ...m, reactions: [...currentReactions, newRecord] };
+                }
+                if (eventType === 'DELETE') {
+                     return { ...m, reactions: currentReactions.filter(r => r.id !== old.id) };
+                }
+                return m;
+            }));
         })
         .subscribe();
 
@@ -408,7 +429,7 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
 
       const { data, count } = await supabase
           .from('gazebo_messages')
-          .select('*, sender:profiles(*)', { count: 'exact' })
+          .select('*, sender:profiles(*), reactions:message_reactions(*)', { count: 'exact' })
           .eq('channel_id', activeChannel.id)
           .order('created_at', { ascending: false })
           .range(from, to);
@@ -433,7 +454,8 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
 
       const formatted = data.map(m => ({
           ...m,
-          reply_to: m.reply_to_id ? repliesMap[m.reply_to_id] : null
+          reply_to: m.reply_to_id ? repliesMap[m.reply_to_id] : null,
+          reactions: m.reactions || []
       })).reverse();
 
       if (isInitial) {
@@ -597,6 +619,22 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
       await supabase.from('gazebo_messages').update({ content: editMessageContent }).eq('id', editingMessageId);
       setEditingMessageId(null);
       setEditMessageContent('');
+  };
+
+  const toggleReaction = async (msg: AppGazeboMessage, emoji: string) => {
+      if (!user) return;
+      const existing = msg.reactions?.find(r => r.user_id === user.id && r.emoji === emoji);
+      if (existing) {
+          await supabase.from('message_reactions').delete().eq('id', existing.id);
+      } else {
+          await supabase.from('message_reactions').insert({
+              message_id: msg.id,
+              user_id: user.id,
+              emoji: emoji,
+              message_type: 'gazebo'
+          });
+      }
+      setShowReactionMenuId(null);
   };
 
   // --- Audio Recording ---
@@ -801,6 +839,14 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
                           const showDateHeader = !prevMsg || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
                           const isSelf = msg.user_id === user?.id;
 
+                          // Group reactions
+                          const groupedReactions = (msg.reactions || []).reduce((acc, r) => {
+                              if (!acc[r.emoji]) acc[r.emoji] = { count: 0, hasReacted: false };
+                              acc[r.emoji].count++;
+                              if (r.user_id === user?.id) acc[r.emoji].hasReacted = true;
+                              return acc;
+                          }, {} as Record<string, { count: number, hasReacted: boolean }>);
+
                           return (
                               <div key={msg.id}>
                                   {showDateHeader && (
@@ -853,6 +899,16 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
                                           )}
                                           
                                           <div className="absolute -top-4 right-0 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded shadow-sm hidden group-hover:flex z-10">
+                                               <div className="relative">
+                                                   <button onClick={() => setShowReactionMenuId(showReactionMenuId === msg.id ? null : msg.id)} className="p-1.5 hover:bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))]" title="Add Reaction"><Smile size={14} /></button>
+                                                   {showReactionMenuId === msg.id && (
+                                                       <div className="absolute top-8 right-0 bg-[rgb(var(--color-surface))] border border-[rgb(var(--color-border))] rounded shadow-xl p-2 flex gap-1 z-30 w-max">
+                                                           {QUICK_EMOJIS.map(emoji => (
+                                                               <button key={emoji} onClick={() => toggleReaction(msg, emoji)} className="hover:bg-[rgb(var(--color-surface-hover))] p-1 rounded text-lg transition">{emoji}</button>
+                                                           ))}
+                                                       </div>
+                                                   )}
+                                               </div>
                                                <button onClick={() => setReplyingTo(msg)} className="p-1.5 hover:bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))]" title="Reply"><CornerUpLeft size={14} /></button>
                                                {isSelf && (
                                                  <>
@@ -867,6 +923,22 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
                                                   {msg.media_type === 'image' && <img src={msg.media_url} className="max-h-80 rounded-lg border border-[rgb(var(--color-border))]" />}
                                                   {msg.media_type === 'video' && <video src={msg.media_url} controls className="max-h-80 rounded-lg border border-[rgb(var(--color-border))]" />}
                                                   {msg.media_type === 'audio' && <div className="bg-[rgb(var(--color-surface))] p-2 rounded w-64 border border-[rgb(var(--color-border))]"><AudioPlayer src={msg.media_url} isOutgoing={false} /></div>}
+                                              </div>
+                                          )}
+
+                                          {/* Reactions Display */}
+                                          {Object.keys(groupedReactions).length > 0 && (
+                                              <div className="flex flex-wrap gap-1 mt-1">
+                                                  {Object.entries(groupedReactions).map(([emoji, { count, hasReacted }]) => (
+                                                      <button
+                                                          key={emoji}
+                                                          onClick={() => toggleReaction(msg, emoji)}
+                                                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs border ${hasReacted ? 'bg-[rgba(var(--color-primary),0.2)] border-[rgb(var(--color-primary))]' : 'bg-[rgb(var(--color-surface-hover))] border-transparent hover:border-[rgb(var(--color-border))]'}`}
+                                                      >
+                                                          <span>{emoji}</span>
+                                                          <span className={hasReacted ? 'font-bold text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-text-secondary))]'}>{count}</span>
+                                                      </button>
+                                                  ))}
                                               </div>
                                           )}
                                       </div>
