@@ -211,15 +211,16 @@ export const Messages = ({
     const message = messages.find(m => m.id === messageId);
     const existingReaction = message?.reactions?.find(r => r.user_id === user.id && r.emoji === emoji);
 
-    if (existingReaction) {
+  if (existingReaction) {
         await supabase.from('message_reactions').delete().eq('id', existingReaction.id);
     } else {
-        await supabase.from('message_reactions').insert({
+        // FIX: Use upsert with ignoreDuplicates to handle existing reactions gracefully
+        await supabase.from('message_reactions').upsert({
             message_id: messageId,
             user_id: user.id,
             emoji: emoji,
             message_type: 'dm'
-        });
+        }, { onConflict: 'message_id, user_id, emoji', ignoreDuplicates: true });
     }
 
     setReactionMenu(null);
