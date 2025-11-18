@@ -8,8 +8,10 @@ import {
   Hash, Volume2, Plus, Settings, Users, X, Send, Paperclip, Mic, Link as LinkIcon,
   Trash2, Edit3, Copy, Crown, Shield, ChevronDown, Menu,
   FileText, LogOut, Image as ImageIcon, Play, Pause,
-  PhoneOff, UserMinus, ShieldAlert, CornerUpLeft, Video
+  PhoneOff, UserMinus, ShieldAlert, CornerUpLeft, Video, Smile
 } from 'lucide-react';
+
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '💀'];
 
 // --- Types ---
 type GazebosProps = {
