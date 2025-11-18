@@ -565,7 +565,7 @@ export const Messages = ({
 
     const { data: messagesData, count } = await supabase
       .from('messages')
-      .select('id, sender_id, recipient_id, content, created_at, media_url, media_type, read, reply_to_id, reactions:message_reactions(*)', { count: 'exact' })
+      .select('*, sender:profiles!sender_id(*), recipient:profiles!recipient_id(*), reactions(*, profiles(*))', { count: 'exact' })
       .or(
         `and(sender_id.eq.${user!.id},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${user!.id})`
       )
@@ -621,7 +621,7 @@ export const Messages = ({
 
     const { data: messagesData, count } = await supabase
       .from('messages')
-      .select('id, sender_id, recipient_id, content, created_at, media_url, media_type, read, reply_to_id, reactions:message_reactions(*)', { count: 'exact' })
+      .select('*, sender:profiles!sender_id(*), recipient:profiles!recipient_id(*), reactions(*, profiles(*))', { count: 'exact' })
       .or(
         `and(sender_id.eq.${user!.id},recipient_id.eq.${selectedUser.id}),and(sender_id.eq.${selectedUser.id},recipient_id.eq.${user!.id})`
       )
