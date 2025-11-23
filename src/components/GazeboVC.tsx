@@ -7,6 +7,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+interface Toast {
+  id: string;
+  message: string;
+  type: 'error' | 'info' | 'success';
+}
+
 interface VoicePeer {
   peerId: string;
   userId: string;
@@ -43,6 +49,14 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
   const [volumeMap, setVolumeMap] = useState<Record<string, number>>({});
   const [isFullScreenMode, setIsFullScreenMode] = useState(false);
 
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const addToast = (message: string, type: 'error' | 'info' | 'success' = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  };
+
   const peerRef = useRef<Peer | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const presenceChannelRef = useRef<any>(null);
@@ -57,33 +71,69 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
     const init = async () => {
       try {
         // 1. Get Local Audio Stream
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        let stream: MediaStream;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (mediaErr) {
+            console.error("Media access error:", mediaErr);
+            addToast("Could not access microphone. Please check permissions.", 'error');
+            onDisconnect();
+            return;
+        }
+
         setLocalStream(stream);
         localStreamRef.current = stream;
         setupAudioAnalysis('local', stream);
 
-        // 2. Initialize PeerJS
-        const myPeerId = `${user.id}::${channelId}`; // Separator to easily split
-        const peer = new Peer(myPeerId);
+        // 2. Initialize PeerJS with retry logic potential (simplified here for robustness)
+        const myPeerId = `${user.id}::${channelId}`;
+        
+        // Sanitize Peer ID (remove special chars if any, though UUIDs are safe)
+        const peer = new Peer(myPeerId, {
+            debug: 1, // Only errors
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
+        });
         peerRef.current = peer;
 
         peer.on('open', (id) => {
+          addToast("Connected to voice server", 'success');
           joinPresenceChannel(id, stream);
         });
 
         peer.on('call', (call) => {
+          addToast("Incoming connection...", 'info');
           call.answer(stream);
           handleCallStream(call);
         });
 
         peer.on('error', (err) => {
             console.error('PeerJS Error:', err);
-            // Optional: Retry logic here
+            if (err.type === 'peer-unavailable') {
+                // Ignore, peer just left
+            } else if (err.type === 'unavailable-id') {
+                addToast("Already connected in another tab.", 'error');
+                onDisconnect();
+            } else if (err.type === 'network') {
+                addToast("Network error. Reconnecting...", 'error');
+                peer.reconnect();
+            } else {
+                addToast(`Connection Error: ${err.type}`, 'error');
+            }
+        });
+
+        peer.on('disconnected', () => {
+            addToast("Disconnected from signaling server. Reconnecting...", 'info');
+            peer.reconnect();
         });
 
       } catch (err) {
-        console.error("Media access error:", err);
-        alert("Could not access microphone. Please check permissions.");
+        console.error("Initialization Error:", err);
+        addToast("Failed to initialize voice chat.", 'error');
         onDisconnect();
       }
     };
@@ -91,7 +141,7 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
     init();
 
     return () => cleanup();
-  }, [channelId]);
+  }, [channelId, user]);
 
   const cleanup = () => {
     presenceChannelRef.current?.unsubscribe();
@@ -190,29 +240,44 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
       });
   };
 
-  const handleCallStream = (call: Peer.MediaConnection, userId?: string, metadata?: any) => {
+  const handleCallStream = async (call: Peer.MediaConnection, userId?: string, metadata?: any) => {
       const remotePeerId = call.peer;
-      const extractedUserId = userId || remotePeerId.split('::')[0];
+      // Robust splitting in case separators vary
+      const parts = remotePeerId.split('::');
+      const extractedUserId = userId || (parts.length > 0 ? parts[0] : 'unknown');
 
-      // Setup initial peer state
+      // 1. Initial State Placeholder
       setPeers(prev => ({
           ...prev,
           [remotePeerId]: { 
               peerId: remotePeerId, 
               userId: extractedUserId, 
-              profile: metadata || { display_name: 'User' }, // Fallback or wait for fetch
+              profile: metadata || { display_name: 'Loading...', username: '...', avatar_url: '' },
               stream: undefined
           }
       }));
 
-      // If we don't have metadata, fetch it
+      // 2. Robust Profile Fetching
+      // If we received metadata via presence sync, use it. Otherwise, fetch from DB.
       if (!metadata) {
-          supabase.from('profiles').select('display_name, avatar_url').eq('id', extractedUserId).single()
-          .then(({ data }) => {
-              if (data) {
-                  setPeers(prev => ({ ...prev, [remotePeerId]: { ...prev[remotePeerId], profile: data } }));
+          try {
+              const { data, error } = await supabase
+                  .from('profiles')
+                  .select('display_name, username, avatar_url')
+                  .eq('id', extractedUserId)
+                  .single();
+              
+              if (!error && data) {
+                  setPeers(prev => ({ 
+                      ...prev, 
+                      [remotePeerId]: { ...prev[remotePeerId], profile: data } 
+                  }));
+              } else {
+                  console.warn("Failed to fetch profile for", extractedUserId, error);
               }
-          });
+          } catch (e) {
+              console.error("Profile fetch exception", e);
+          }
       }
 
       call.on('stream', (remoteStream) => {
@@ -412,10 +477,11 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
 
         {/* Main Grid */}
         <div className="flex-1 overflow-y-auto p-4 flex items-center justify-center custom-scrollbar">
-            <div className={`grid gap-4 w-full transition-all duration-500 ${getGridClass(participants.length)} ${focusedPeerId ? 'h-full' : 'auto-rows-fr'}`}>
+            {/* Optimization: For > 12 users, force smaller grid items to prevent overflow issues */}
+            <div className={`grid gap-4 w-full transition-all duration-500 ${participants.length > 12 ? 'grid-cols-4 md:grid-cols-5 lg:grid-cols-6 auto-rows-[150px]' : getGridClass(participants.length)} ${focusedPeerId ? 'h-full' : 'auto-rows-fr'}`}>
                 {participants.map(p => {
                     const isFocused = focusedPeerId === p.peerId;
-                    if (focusedPeerId && !isFocused) return null; // Hide others if focused (or move to sidebar strip in V2)
+                    if (focusedPeerId && !isFocused) return null;
                     
                     const hasVideo = p.stream?.getVideoTracks().length! > 0 && p.stream?.getVideoTracks()[0].enabled;
 
@@ -504,6 +570,21 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
                 <PhoneOff size={20} />
                 <span className="hidden md:inline">Disconnect</span>
             </button>
+        </div>
+
+        {/* TOAST NOTIFICATIONS */}
+        <div className="fixed bottom-24 right-4 z-[70] flex flex-col gap-2 pointer-events-none">
+            {toasts.map(toast => (
+                <div 
+                    key={toast.id}
+                    className={`
+                        px-4 py-2 rounded-lg shadow-lg text-white text-sm font-medium animate-in slide-in-from-right fade-in duration-300
+                        ${toast.type === 'error' ? 'bg-red-500' : toast.type === 'success' ? 'bg-green-500' : 'bg-gray-800'}
+                    `}
+                >
+                    {toast.message}
+                </div>
+            ))}
         </div>
     </div>
   );
