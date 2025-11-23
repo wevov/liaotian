@@ -1439,14 +1439,9 @@ export const Gazebos = ({ initialInviteCode, onInviteHandled, initialGazeboId }:
                       </div>
 
                       <div className="flex gap-2 mt-4">
-                          <button 
-                             onClick={() => {
-                                 setViewingProfile(null);
-                                 navigate(`/message?user=${viewingProfile.username}`);
-                             }}
-                             className="flex-1 bg-[rgb(var(--color-primary))] text-white py-2 rounded font-medium text-sm"
-                          >
-                             Message
+                          <button onClick={() => {window.location.href = `/message?user=${viewingProfile.username}`;}} 
+                            className="flex-1 bg-[rgb(var(--color-primary))] text-white py-2 rounded font-medium text-sm">
+                            Message
                           </button>
                           <button 
                              onClick={() => {
