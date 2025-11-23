@@ -32,6 +32,84 @@ interface GazeboVCProps {
   onToggleMinimize: () => void;
 }
 
+// --- Memoized Video Component to prevent flashing ---
+const VideoTile = React.memo(({ 
+    peerId, 
+    userId,
+    stream, 
+    profile, 
+    isMuted, 
+    isFocused, 
+    volume, 
+    onToggleFocus 
+}: { 
+    peerId: string;
+    userId: string;
+    stream?: MediaStream;
+    profile: any;
+    isMuted?: boolean;
+    isFocused: boolean;
+    volume: number;
+    onToggleFocus: () => void;
+}) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+
+    // Only attach stream when it actually changes, NOT on every render
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream]);
+
+    const hasVideo = stream && stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled;
+
+    return (
+        <div 
+            className={`relative bg-gray-800 rounded-xl overflow-hidden border-2 transition-all duration-200 group ${volume > 20 ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'border-transparent'} ${isFocused ? 'w-full h-full' : 'aspect-video'}`}
+            onDoubleClick={onToggleFocus}
+        >
+            {/* Video Feed */}
+            {hasVideo ? (
+                <video 
+                    ref={videoRef}
+                    autoPlay 
+                    playsInline 
+                    muted={peerId === 'local'} // Always mute local to prevent echo
+                    className="w-full h-full bg-black object-cover" 
+                />
+            ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
+                    <div className={`relative transition-transform duration-150 ${volume > 20 ? 'scale-110' : 'scale-100'}`}>
+                        <img 
+                            src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`} 
+                            className="w-24 h-24 rounded-full shadow-2xl object-cover bg-gray-700"
+                        />
+                        {volume > 20 && <div className="absolute -inset-2 rounded-full border-4 border-green-500 opacity-50 animate-ping" />}
+                    </div>
+                </div>
+            )}
+
+            {/* Status Overlay */}
+            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10 pointer-events-none">
+                <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg flex items-center gap-2 text-white text-sm font-medium shadow-lg">
+                    {isMuted ? <MicOff size={14} className="text-red-500" /> : <Mic size={14} className="text-green-400" />}
+                    {profile?.display_name}
+                </div>
+            </div>
+
+            {/* Hover Controls */}
+            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto">
+                <button 
+                    onClick={onToggleFocus}
+                    className="p-1.5 bg-black/50 text-white rounded hover:bg-black/70"
+                >
+                    {isFocused ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
+                </button>
+            </div>
+        </div>
+    );
+});
+
 export const GazeboVC: React.FC<GazeboVCProps> = ({ 
   channelId, 
   channelName, 
@@ -86,7 +164,7 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
         setupAudioAnalysis('local', stream);
 
         // 2. Initialize PeerJS with retry logic potential (simplified here for robustness)
-        const myPeerId = `${user.id}::${channelId}`;
+        const myPeerId = `${user.id}__${channelId}`;
         
         // Sanitize Peer ID (remove special chars if any, though UUIDs are safe)
         const peer = new Peer(myPeerId, {
@@ -243,7 +321,7 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
   const handleCallStream = async (call: Peer.MediaConnection, userId?: string, metadata?: any) => {
       const remotePeerId = call.peer;
       // Robust splitting in case separators vary
-      const parts = remotePeerId.split('::');
+      const parts = remotePeerId.split('__');
       const extractedUserId = userId || (parts.length > 0 ? parts[0] : 'unknown');
 
       // 1. Initial State Placeholder
@@ -482,54 +560,19 @@ export const GazeboVC: React.FC<GazeboVCProps> = ({
                 {participants.map(p => {
                     const isFocused = focusedPeerId === p.peerId;
                     if (focusedPeerId && !isFocused) return null;
-                    
-                    const hasVideo = p.stream?.getVideoTracks().length! > 0 && p.stream?.getVideoTracks()[0].enabled;
 
                     return (
-                        <div 
-                            key={p.peerId} 
-                            className={`relative bg-gray-800 rounded-xl overflow-hidden border-2 transition-all duration-200 group ${p.volume > 20 ? 'border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.4)]' : 'border-transparent'} ${isFocused ? 'w-full h-full' : 'aspect-video'}`}
-                            onDoubleClick={() => setFocusedPeerId(isFocused ? null : p.peerId)}
-                        >
-                            {/* Video Feed */}
-                            {hasVideo ? (
-                                <video 
-                                    ref={el => {if (el && p.stream) el.srcObject = p.stream}}
-                                    autoPlay 
-                                    playsInline 
-                                    muted={p.peerId === 'local'}
-                                    className={`w-full h-full bg-black ${isScreenSharing && p.peerId === 'local' ? 'object-contain' : 'object-cover'}`} 
-                                />
-                            ) : (
-                                <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-                                    <div className={`relative transition-transform duration-150 ${p.volume > 20 ? 'scale-110' : 'scale-100'}`}>
-                                        <img 
-                                            src={p.profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.userId}`} 
-                                            className="w-24 h-24 rounded-full shadow-2xl object-cover bg-gray-700"
-                                        />
-                                        {p.volume > 20 && <div className="absolute -inset-2 rounded-full border-4 border-green-500 opacity-50 animate-ping" />}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Status Overlay */}
-                            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center z-10">
-                                <div className="bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-lg flex items-center gap-2 text-white text-sm font-medium shadow-lg">
-                                    {p.isMuted ? <MicOff size={14} className="text-red-500" /> : <Mic size={14} className="text-green-400" />}
-                                    {p.profile?.display_name}
-                                </div>
-                            </div>
-
-                            {/* Hover Controls */}
-                            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button 
-                                    onClick={() => setFocusedPeerId(isFocused ? null : p.peerId)}
-                                    className="p-1.5 bg-black/50 text-white rounded hover:bg-black/70"
-                                >
-                                    {isFocused ? <Minimize2 size={16}/> : <Maximize2 size={16}/>}
-                                </button>
-                            </div>
-                        </div>
+                        <VideoTile 
+                            key={p.peerId}
+                            peerId={p.peerId}
+                            userId={p.userId}
+                            stream={p.stream}
+                            profile={p.profile}
+                            isMuted={p.isMuted}
+                            volume={p.volume}
+                            isFocused={isFocused}
+                            onToggleFocus={() => setFocusedPeerId(isFocused ? null : p.peerId)}
+                        />
                     );
                 })}
             </div>
