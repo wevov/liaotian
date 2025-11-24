@@ -1,6 +1,6 @@
 // src/components/Sidebar.tsx
 import React from 'react';
-import { Home, Archive } from 'lucide-react';
+import { Home, Archive, Users, MessagesSquare } from 'lucide-react';
 
 interface SidebarProps {
   show: boolean;
@@ -12,6 +12,8 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ show, onClose, setView, view }) => {
   const menuItems = [
     { icon: <Home size={20} />, label: 'Home', view: 'feed', onClick: () => { setView('feed'); onClose(); } },
+    { icon: <Users size={20} />, label: 'Groups', view: 'groups', onClick: () => { setView('groups'); onClose(); } }, // New
+    { icon: <MessagesSquare size={20} />, label: 'Forums', view: 'forums', onClick: () => { setView('forums'); onClose(); } }, // New
     { icon: <Archive size={20} />, label: 'Status Archive', view: 'archive', onClick: () => { setView('archive'); onClose(); } },
   ];
 
