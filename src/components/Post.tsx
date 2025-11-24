@@ -114,21 +114,23 @@ export const AudioPlayer: React.FC<{ src: string }> = ({ src }) => {
   );
 };
 
-export const getEmbeddedMedia = (content: string, media_url: string | null) => {
-  if (media_url) return null;
-  const URL_REGEX = /^(?:http(s)?:\/\/)?[\w.-]+(?:\.[\w\.-]+)+[\w\-\._~:/?#[\]@!\$&'\(\)\*\+,;=.]+$/;
-  const trimmedContent = content.trim();
-  if (URL_REGEX.test(trimmedContent)) {
-    const youtubeMatch = trimmedContent.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/i);
-    if (youtubeMatch && youtubeMatch[1]) {
-      return (
-        <iframe title="YouTube" className="rounded-2xl max-h-96 w-full aspect-video" src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
-      );
-    }
+// Replaces getEmbeddedMedia. purely handles generating the YouTube iframe from a URL string.
+const getYoutubeEmbed = (url: string) => {
+  if (!url) return null;
+  const youtubeMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|v\/|shorts\/))([\w-]{11})/i);
+  
+  if (youtubeMatch && youtubeMatch[1]) {
     return (
-      <a href={trimmedContent} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-3 bg-[rgb(var(--color-surface-hover))] rounded-lg text-[rgb(var(--color-text))] hover:bg-[rgb(var(--color-border))] transition inline-flex">
-        <LinkIcon size={20} /> {trimmedContent.length > 50 ? trimmedContent.substring(0, 47) + '...' : trimmedContent}
-      </a>
+      <div className="mt-3 rounded-2xl overflow-hidden bg-black">
+        <iframe 
+          title="YouTube" 
+          className="w-full aspect-video" 
+          src={`https://www.youtube.com/embed/${youtubeMatch[1]}`} 
+          frameBorder="0" 
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+          allowFullScreen
+        ></iframe>
+      </div>
     );
   }
   return null;
@@ -351,18 +353,24 @@ export const PostItem: React.FC<PostItemProps> = ({
             ) : (
               <>
                  <p className="mt-1 whitespace-pre-wrap break-words text-[rgb(var(--color-text))]">{displayContent}</p>
-                 {getEmbeddedMedia(displayContent, post.media_url) && <div className="mt-3">{getEmbeddedMedia(displayContent, post.media_url)}</div>}
                  
-                 {/* Message Embed Logic */}
-                 {/* We extract the URL. We also check if it is NOT a YouTube link, 
-                     because getEmbeddedMedia above already handles YouTube with an iframe */}
+                 {/* UNIFIED EMBED LOGIC */}
                  {(() => {
+                    // 1. If user uploaded a file directly, that takes priority. Don't show URL previews.
+                    if (post.media_url) return null;
+
+                    // 2. Extract the first URL found in the text
                     const url = extractFirstUrl(displayContent);
-                    const isYoutube = url && (url.includes('youtube.com') || url.includes('youtu.be'));
-                    if (url && !isYoutube && !post.media_url) {
-                      return <MessageEmbed url={url} />;
+                    if (!url) return null;
+
+                    // 3. Check if it's YouTube -> Render Iframe
+                    const youtubeEmbed = getYoutubeEmbed(url);
+                    if (youtubeEmbed) {
+                      return youtubeEmbed;
                     }
-                    return null;
+
+                    // 4. If not YouTube -> Render MessageEmbed
+                    return <MessageEmbed url={url} />;
                  })()}
               </>
             )}
