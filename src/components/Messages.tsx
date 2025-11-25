@@ -1752,19 +1752,28 @@ export const Messages = ({
                       </div>
                     )}
                     
-                    {/* Text Content */}
-                    {msg.content && (
-                        <p className={`whitespace-pre-wrap leading-relaxed text-sm md:text-sm text-left ${isOnlyEmoji(msg.content) ? 'text-2xl md:text-3xl' : ''}`}>
-                            {msg.content}
-                        </p>
-                    )}
+                    {/* Text Content & Embeds Logic */}
+                    {(() => {
+                        const url = msg.content && !msg.media_url ? extractFirstUrl(msg.content) : null;
+                        const textToDisplay = url ? msg.content.replace(url, '').trim() : msg.content;
 
-                    {/* Embeds */}
-                    {msg.content && extractFirstUrl(msg.content) && !msg.media_url && (
-                        <div className="mt-2 rounded-lg overflow-hidden text-xs">
-                             <MessageEmbed url={extractFirstUrl(msg.content)!} />
-                        </div>
-                    )}
+                        return (
+                           <>
+                             {textToDisplay && (
+                                <p className={`whitespace-pre-wrap leading-relaxed text-sm md:text-sm text-left ${isOnlyEmoji(textToDisplay) ? 'text-2xl md:text-3xl' : ''}`}>
+                                    {textToDisplay}
+                                </p>
+                             )}
+
+                             {/* Embeds */}
+                             {url && (
+                                <div className="mt-2 rounded-lg overflow-hidden text-xs">
+                                     <MessageEmbed url={url} />
+                                </div>
+                             )}
+                           </>
+                        );
+                    })()}
                     </>
                   )}
                     
