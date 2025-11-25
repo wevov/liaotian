@@ -234,13 +234,21 @@ export const Messages = ({
 
   const handleDeleteMessage = async (messageId: string) => {
     setReactionMenu(null);
+    // Securely update DB: set flag
     const { error } = await supabase
       .from('messages')
-      .update({ is_deleted: true })
-      .eq('id', messageId);
+      .update({ 
+        is_deleted: true,
+      })
+      .eq('id', messageId)
+      .eq('sender_id', user!.id); // Extra security check
     
+    // Optimistic UI update (Realtime subscription will also catch this)
     if (!error) {
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, is_deleted: true } : m));
+      setMessages(prev => prev.map(m => m.id === messageId ? { 
+        ...m, 
+        is_deleted: true, 
+      } : m));
     }
   };
 
@@ -257,11 +265,21 @@ export const Messages = ({
 
     const { error } = await supabase
       .from('messages')
-      .update({ content: content, is_edited: true })
-      .eq('id', editingMessage.id);
+      .update({ 
+        content: content, 
+        is_edited: true 
+      })
+      .eq('id', editingMessage.id)
+      .eq('sender_id', user!.id); // Extra security check
 
     if (!error) {
-      setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, content: content, is_edited: true } : m));
+      // Update local state immediately
+      setMessages(prev => prev.map(m => m.id === editingMessage.id ? { 
+        ...m, 
+        content: content, 
+        is_edited: true 
+      } : m));
+      
       setEditingMessage(null);
       setContent('');
     }
@@ -287,6 +305,22 @@ export const Messages = ({
   useEffect(() => {
       if (showGifPicker) searchGifs(gifQuery);
   }, [showGifPicker, gifQuery]);
+
+  // Handle click outside to close GIF picker
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (gifPickerRef.current && !gifPickerRef.current.contains(event.target as Node)) {
+        setShowGifPicker(false);
+      }
+    };
+
+    if (showGifPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showGifPicker]);
 
   const sendGif = async (url: string) => {
       setShowGifPicker(false);
@@ -392,6 +426,7 @@ export const Messages = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const gifPickerRef = useRef<HTMLDivElement>(null);
 
   const typingChannelRef = useRef<any>(null);
   const outgoingTypingChannelRef = useRef<any>(null);
@@ -1844,29 +1879,51 @@ export const Messages = ({
 
                     {/* GIF PICKER UI */}
                     {showGifPicker && (
-                        <div className="absolute bottom-full left-0 right-0 h-64 bg-[rgb(var(--color-surface))] border-t border-[rgb(var(--color-border))] rounded-t-2xl z-20 flex flex-col shadow-2xl">
-                            <div className="p-2 border-b border-[rgb(var(--color-border))] flex gap-2">
+                        <div 
+                            ref={gifPickerRef} 
+                            className="absolute bottom-full left-0 right-0 h-80 bg-[rgb(var(--color-surface))] border-t border-[rgb(var(--color-border))] rounded-t-2xl z-20 flex flex-col shadow-2xl"
+                        >
+                            <div className="p-3 border-b border-[rgb(var(--color-border))] flex gap-2 items-center">
                                 <div className="relative flex-1">
-                                    <Search size={14} className="absolute left-2 top-2.5 text-[rgb(var(--color-text-secondary))]" />
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[rgb(var(--color-text-secondary))]" />
                                     <input 
                                         type="text" 
-                                        placeholder="Search GIFs via Tenor..." 
+                                        placeholder="Search GIFs..." 
                                         value={gifQuery}
                                         onChange={e => setGifQuery(e.target.value)}
-                                        className="w-full pl-8 pr-2 py-1.5 text-sm bg-[rgb(var(--color-background))] rounded-lg border border-[rgb(var(--color-border))]"
+                                        // Fixed: Added text-[rgb(var(--color-text))] and improved focus states
+                                        className="w-full pl-9 pr-3 py-2 text-sm bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))] rounded-xl border border-[rgb(var(--color-border))] focus:border-[rgb(var(--color-accent))] focus:outline-none"
                                         autoFocus
                                     />
                                 </div>
-                                <button onClick={() => setShowGifPicker(false)} className="p-2 hover:bg-[rgb(var(--color-surface-hover))] rounded-full">
-                                    <X size={16} />
+                                <button onClick={() => setShowGifPicker(false)} className="p-2 hover:bg-[rgb(var(--color-surface-hover))] rounded-full text-[rgb(var(--color-text-secondary))]">
+                                    <X size={20} />
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-1 p-1 custom-scrollbar">
-                                {gifs.map(gif => (
-                                    <button key={gif.id} onClick={() => sendGif(gif.media_formats.gif.url)} className="relative aspect-video rounded-md overflow-hidden hover:opacity-80">
-                                        <img src={gif.media_formats.tinygif.url} alt="GIF" className="w-full h-full object-cover" />
-                                    </button>
-                                ))}
+                            
+                            {/* Fixed: Use CSS Columns (Masonry) instead of Grid to handle variable height GIFs */}
+                            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                                <div className="columns-2 md:columns-3 gap-2 space-y-2">
+                                    {gifs.map(gif => (
+                                        <button 
+                                            key={gif.id} 
+                                            onClick={() => sendGif(gif.media_formats.gif.url)} 
+                                            className="w-full block rounded-lg overflow-hidden hover:opacity-90 hover:ring-2 hover:ring-[rgb(var(--color-accent))] transition-all break-inside-avoid"
+                                        >
+                                            <img 
+                                                src={gif.media_formats.tinygif.url} 
+                                                alt="GIF" 
+                                                className="w-full h-auto object-cover" 
+                                                loading="lazy"
+                                            />
+                                        </button>
+                                    ))}
+                                </div>
+                                {gifs.length === 0 && (
+                                    <div className="flex items-center justify-center h-full text-[rgb(var(--color-text-secondary))] text-sm">
+                                        No GIFs found
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
