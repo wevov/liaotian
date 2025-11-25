@@ -1376,8 +1376,13 @@ export const Messages = ({
                     {selectedUser.verified && <BadgeCheck size={14} className="text-[rgb(var(--color-accent))] flex-shrink-0" />}
                   </div>
                   <div className="text-xs text-[rgb(var(--color-text-secondary))] truncate">
-                    {isUserOnline(selectedUser.last_seen) ? 'Active now' : `@${selectedUser.username}`}
-                  </div>
+                  {isUserOnline(selectedUser.last_seen) 
+                    ? <span className="text-green-500 font-medium">Active now</span>
+                    : selectedUser.last_seen 
+                        ? `Last seen ${new Date(selectedUser.last_seen).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+                        : `@${selectedUser.username}`
+                  }
+                </div>
                 </div>
               </button>
               
@@ -1530,12 +1535,15 @@ export const Messages = ({
                     )}
                     
                     {/* Timestamp & Status */}
-                    <div className={`flex items-center justify-end gap-1 mt-1 select-none ${isMe ? 'text-white/60' : 'text-[rgb(var(--color-text-secondary))] opacity-60'}`}>
-                      <span className="text-[9px]">
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    <div className={`flex items-center justify-end gap-1 mt-1 select-none ${isMe ? 'text-white/70' : 'text-[rgb(var(--color-text-secondary))] opacity-60'}`}>
+                      <span className="text-[9px] font-medium tracking-tight">
+                        {new Date(msg.created_at).toLocaleString([], { day: 'numeric', month: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit' })}
                       </span>
                       {isMe && (
-                        msg.read ? <CheckCheck size={10} className="text-white" /> : <Check size={10} />
+                        msg.read 
+                          // Changed text-white to text-sky-300 (Bright Blue) and increased opacity/glow
+                          ? <CheckCheck size={14} className="text-sky-300 drop-shadow-[0_0_2px_rgba(125,211,252,0.5)]" /> 
+                          : <Check size={12} />
                       )}
                     </div>
 
