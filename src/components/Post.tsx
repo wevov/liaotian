@@ -414,13 +414,6 @@ export const PostItem: React.FC<PostItemProps> = ({
       <div className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]">
         {/* SPECIAL EVENT RGB OVERLAY */}
         {SPECIAL_EVENT_MODE && <div className="special-event-overlay" />}
-
-        {post.is_repost && (
-            <div className="flex items-center gap-2 mb-2 text-xs font-bold text-[rgb(var(--color-text-secondary))] uppercase tracking-wide ml-14">
-                <Repeat size={12} />
-                <span>{post.profiles?.display_name} Reposted</span>
-            </div>
-        )}
         
         <div className="flex gap-4 items-start">
           <button onClick={() => onNavigateToProfile(post.user_id)} className="flex-shrink-0 relative">
