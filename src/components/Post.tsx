@@ -18,7 +18,8 @@ import {
   Camera,
   Share2,
   Edit3,
-  Check
+  Check,
+  Repeat
 } from 'lucide-react';
 
 // --- TYPES ---
@@ -139,6 +140,62 @@ const getYoutubeEmbed = (url: string) => {
 
 // --- SUB COMPONENTS ---
 
+const EmbeddedPost: React.FC<{ post: PostType; isDeleted?: boolean }> = ({ post, isDeleted }) => {
+  const [embedComponent, setEmbedComponent] = useState<React.ReactNode>(null);
+  const [textToDisplay, setTextToDisplay] = useState('');
+
+  useEffect(() => {
+    if (isDeleted || !post) return;
+    
+    // Process text for embeds
+    let text = post.content;
+    const match = text.match(/(https?:\/\/[^\s]+)/);
+    const url = match ? match[0] : null;
+    
+    if (!post.media_url && url) {
+        text = text.replace(url, '').trim();
+        const yt = getYoutubeEmbed(url); 
+        setEmbedComponent(yt || <MessageEmbed url={url} />);
+    } else {
+        setEmbedComponent(null);
+    }
+    setTextToDisplay(text);
+  }, [post, isDeleted]);
+
+  if (isDeleted || !post) {
+    return (
+      <div className="mt-2 p-4 border border-[rgb(var(--color-border))] rounded-xl bg-[rgb(var(--color-surface-hover))] text-[rgb(var(--color-text-secondary))] italic text-sm flex items-center gap-2">
+         <X size={16} /> [Original post has been deleted or cannot be found right now]
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border border-[rgb(var(--color-border))] rounded-xl overflow-hidden hover:bg-[rgb(var(--color-surface-hover))] transition cursor-pointer">
+       {/* Simple Header */}
+       <div className="p-3 pb-1 flex items-center gap-2">
+          <img src={post.profiles?.avatar_url} className="w-6 h-6 rounded-full" alt="" />
+          <span className="font-bold text-sm text-[rgb(var(--color-text))]">{post.profiles?.display_name}</span>
+          <span className="text-xs text-[rgb(var(--color-text-secondary))]">@{post.profiles?.username} • {new Date(post.created_at).toLocaleDateString()}</span>
+       </div>
+       
+       {/* Content */}
+       <div className="p-3 pt-1">
+          {textToDisplay && <p className="text-sm text-[rgb(var(--color-text))] line-clamp-3 mb-2">{textToDisplay}</p>}
+          {embedComponent}
+          
+          {post.media_url && (
+             <div className="mt-2 rounded-lg overflow-hidden h-40 bg-black/5 relative">
+                {post.media_type === 'image' && <img src={post.media_url} className="w-full h-full object-cover" alt="Media" />}
+                {post.media_type === 'video' && <video src={post.media_url} className="w-full h-full object-cover" />}
+                {post.media_type === 'audio' && <div className="p-4 flex items-center justify-center h-full"><span className="text-xs font-bold uppercase tracking-widest opacity-50">Audio Attachment</span></div>}
+             </div>
+          )}
+       </div>
+    </div>
+  );
+};
+
 const Lightbox: React.FC<{ url: string; type: 'image' | 'video'; onClose: () => void }> = ({ url, type, onClose }) => (
   <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4 cursor-pointer" onClick={onClose}>
     <div className="max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
@@ -178,6 +235,7 @@ export const PostItem: React.FC<PostItemProps> = ({
   const [showLikesModal, setShowLikesModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showRepostModal, setShowRepostModal] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [lightboxType, setLightboxType] = useState<'image' | 'video' | null>(null);
   
@@ -188,6 +246,34 @@ export const PostItem: React.FC<PostItemProps> = ({
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [openMenu, setOpenMenu] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+
+  // Repost Logic
+  const [repostCaption, setRepostCaption] = useState('');
+  const [isReposting, setIsReposting] = useState(false);
+
+  const handleRepost = async () => {
+      if (!currentUserId) return;
+      setIsReposting(true);
+      
+      const targetPostId = post.id; // We repost THIS post
+
+      const { error } = await supabase.from('posts').insert({
+          user_id: currentUserId,
+          content: repostCaption, 
+          repost_of: targetPostId, 
+          is_repost: true,
+          media_type: 'image' 
+      });
+
+      if (!error) {
+          setShowRepostModal(false);
+          setRepostCaption('');
+          alert("Reposted!"); 
+      } else {
+          alert("Failed to repost.");
+      }
+      setIsReposting(false);
+  };
 
   // Edit Logic
   const [isEditing, setIsEditing] = useState(false);
@@ -328,6 +414,13 @@ export const PostItem: React.FC<PostItemProps> = ({
       <div className="border-b border-[rgb(var(--color-border))] p-4 hover:bg-[rgb(var(--color-surface-hover))] transition bg-[rgb(var(--color-surface))]">
         {/* SPECIAL EVENT RGB OVERLAY */}
         {SPECIAL_EVENT_MODE && <div className="special-event-overlay" />}
+
+        {post.is_repost && (
+            <div className="flex items-center gap-2 mb-2 text-xs font-bold text-[rgb(var(--color-text-secondary))] uppercase tracking-wide ml-14">
+                <Repeat size={12} />
+                <span>{post.profiles?.display_name} Reposted</span>
+            </div>
+        )}
         
         <div className="flex gap-4 items-start">
           <button onClick={() => onNavigateToProfile(post.user_id)} className="flex-shrink-0 relative">
@@ -404,6 +497,12 @@ export const PostItem: React.FC<PostItemProps> = ({
                              </p>
                           )}
                           {embedComponent}
+                          {post.is_repost && (
+                              <EmbeddedPost 
+                                  post={post.original_post as PostType} 
+                                  isDeleted={!post.original_post} 
+                              />
+                          )}
                        </>
                     );
                  })()}
@@ -442,6 +541,15 @@ export const PostItem: React.FC<PostItemProps> = ({
                   <MessageCircle size={18} />
                 </button>
                 {post.comment_count > 0 && <button onClick={(e) => { e.stopPropagation(); setShowCommentsModal(true); }} className="text-sm text-[rgb(var(--color-text-secondary))] hover:underline">{post.comment_count}</button>}
+              </div>
+              <div className="flex items-center gap-1 group">
+                <button 
+                    onClick={(e) => { e.stopPropagation(); setShowRepostModal(true); }} 
+                    className="p-2 rounded-full transition text-[rgb(var(--color-text-secondary))] hover:bg-green-500/10 hover:text-green-500"
+                >
+                  <Repeat size={18} />
+                </button>
+                {(post.repost_count || 0) > 0 && <span className="text-sm text-[rgb(var(--color-text-secondary))]">{post.repost_count}</span>}
               </div>
             </div>
           </div>
@@ -556,6 +664,45 @@ export const PostItem: React.FC<PostItemProps> = ({
             <button onClick={() => { setShowDeleteModal(false); cancelDeleteHold(); }} className="mt-3 w-full py-2 text-[rgb(var(--color-text-secondary))] hover:bg-[rgb(var(--color-surface-hover))] rounded-xl transition">Cancel</button>
           </div>
         </div>
+      )}
+
+      {showRepostModal && (
+          <div className="fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4" onClick={() => setShowRepostModal(false)}>
+              <div className="bg-[rgb(var(--color-surface))] w-full max-w-lg rounded-2xl flex flex-col shadow-2xl border border-[rgb(var(--color-border))]" onClick={e => e.stopPropagation()}>
+                  <div className="p-4 border-b border-[rgb(var(--color-border))] flex items-center justify-between">
+                      <h3 className="font-bold text-lg text-[rgb(var(--color-text))]">Repost</h3>
+                      <button onClick={() => setShowRepostModal(false)} className="p-1 hover:bg-[rgb(var(--color-surface-hover))] rounded-full"><X size={20} className="text-[rgb(var(--color-text))]" /></button>
+                  </div>
+                  <div className="p-4">
+                      {/* Input for Caption */}
+                      <div className="flex gap-3 mb-4">
+                          <textarea 
+                              value={repostCaption}
+                              onChange={e => setRepostCaption(e.target.value)}
+                              placeholder="Say something about this... (optional)"
+                              className="w-full bg-transparent outline-none text-[rgb(var(--color-text))] resize-none h-24 p-2 border border-[rgb(var(--color-border))] rounded-lg"
+                              autoFocus
+                          />
+                      </div>
+
+                      {/* Preview of the post being reposted */}
+                      <div className="pointer-events-none opacity-80">
+                         <EmbeddedPost post={post} />
+                      </div>
+
+                      <div className="flex justify-end mt-4">
+                          <button 
+                              onClick={handleRepost}
+                              disabled={isReposting}
+                              className="bg-[rgb(var(--color-accent))] text-white font-bold py-2 px-6 rounded-full hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50"
+                          >
+                              <Repeat size={18} />
+                              {isReposting ? 'Reposting...' : 'Repost'}
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
     </>
   );
