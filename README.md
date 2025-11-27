@@ -77,7 +77,6 @@ If you just want to create an account on **Liaoverse** (our official deployment)
 ## 🚨 Current flaws
 - [ ] Cookie “__cf_bm” has been rejected for invalid domain. Browser console error logs sometimes.
 - [ ] audio and video calling may require a turn server
-- [ ] Current App.tsx URL param handling messes up non-conventional usernames (previous versions allowed them)
 - [ ] Gazebo VC video and screen sharing issues (local works fine)
 - [ ] Groups need better UI/UX for modification, post flairs in feed, etc.
 - [ ] Forums need better UI/UX and allow media attachments
