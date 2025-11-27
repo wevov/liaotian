@@ -185,12 +185,29 @@ const Main = () => {
         return;
       }
       
-      // 8. Priority: Custom Page Slugs
-      const slugMatch = path.match(/^\/([a-zA-Z0-9-]+)$/);
+      // 8. Priority: Custom Page Slugs / Username Paths (More permissive regex)
+      const slugMatch = path.match(/^\/([^/]+)\/?$/); // Matches anything that isn't a slash
       if (slugMatch) {
-         const slug = slugMatch[1];
-         // Ignore reserved words just in case
-         if (!['user', 'invite', 'gazebo', 'message', 'stats'].includes(slug)) {
+         const rawSlug = slugMatch[1];
+         const slug = decodeURIComponent(rawSlug); // Handle spaces (%20) and special chars
+
+         // Ignore reserved words
+         if (!['user', 'invite', 'gazebo', 'message', 'stats', 'groups', 'forums', 'archive', 'settings'].includes(rawSlug.toLowerCase())) {
+             
+             // Try to find a user with this username first (Case Insensitive)
+             const { data: profileData } = await supabase
+                .from('profiles')
+                .select('id')
+                .ilike('username', slug) // Use ilike for case-insensitive match
+                .maybeSingle();
+
+             if (profileData) {
+                 setSelectedProfileId(profileData.id);
+                 setView('profile');
+                 return;
+             }
+
+             // If no user found, assume it's a custom page
              setView('page');
              setPageSlug(slug);
              return;
@@ -199,6 +216,22 @@ const Main = () => {
 
       // Default
       if (path === '/') {
+          // Handle /?user=... query param with decoded values and case-insensitivity
+          if (usernameQuery) {
+             const decodedUsername = decodeURIComponent(usernameQuery);
+             const { data } = await supabase
+                .from('profiles')
+                .select('id')
+                .ilike('username', decodedUsername)
+                .maybeSingle();
+             
+             if (data) {
+                setSelectedProfileId(data.id);
+                setView('profile');
+                return;
+             }
+          }
+
           setView('feed');
           setSelectedProfileId(undefined);
           setSelectedPostId(undefined);
