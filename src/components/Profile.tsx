@@ -937,13 +937,14 @@ export const Profile = ({ userId, initialPostId, onMessage, onSettings }: { user
                 </button>
                 {profile.verified && <BadgeCheck size={22} className="text-[rgb(var(--color-accent))]" />}
               </div>
-              <p className="text-[rgb(var(--color-text-secondary))]">@{profile.username}</p>
-              {/* --- CUSTOM BADGE --- */}
+              <div className="flex items-center gap-2">
+                <p className="text-[rgb(var(--color-text-secondary))]">@{profile.username}</p>
+                {/* --- CUSTOM BADGE --- */}
                 {(profile as any).badge_url && (
-                  <div className="group relative ml-2 inline-flex items-center justify-center h-6 px-2 min-w-[24px] rounded bg-[rgb(var(--color-surface-hover))] overflow-visible align-middle select-none">
+                  <div className="group relative inline-flex items-center justify-center h-5 px-2 min-w-[20px] rounded bg-[rgb(var(--color-surface-hover))] overflow-visible align-middle select-none">
                     <div className="absolute inset-0 bg-cover bg-center rounded" style={{ backgroundImage: `url(${(profile as any).badge_url})` }} />
                     {(profile as any).badge_text && (
-                       <span className="relative z-10 text-[10px] font-black text-white uppercase tracking-widest drop-shadow-md shadow-black">{(profile as any).badge_text}</span>
+                       <span className="relative z-10 text-[9px] font-black text-white uppercase tracking-widest drop-shadow-md shadow-black">{(profile as any).badge_text}</span>
                     )}
                     {(profile as any).badge_tooltip && (
                       <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 w-max max-w-[150px] px-2 py-1 bg-black/90 backdrop-blur text-white text-xs rounded opacity-0 group-hover:opacity-100 transition pointer-events-none z-50 text-center shadow-xl">
@@ -952,6 +953,7 @@ export const Profile = ({ userId, initialPostId, onMessage, onSettings }: { user
                     )}
                   </div>
                 )}
+              </div>
               {profile.bio && <p className="mt-3 text-[rgb(var(--color-text))]">{profile.bio}</p>}
               <div className="mt-4 flex gap-8 items-center text-sm"> {/* UPDATED: added items-center */}
                 <button onClick={openFollowing} className="hover:underline text-[rgb(var(--color-text))]">
