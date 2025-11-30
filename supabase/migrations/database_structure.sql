@@ -52,6 +52,7 @@ CREATE TABLE public.forum_posts (
   media_type text DEFAULT 'image'::text,
   created_at timestamp with time zone DEFAULT now(),
   comment_count integer DEFAULT 0,
+  like_count integer DEFAULT 0,
   CONSTRAINT forum_posts_pkey PRIMARY KEY (id),
   CONSTRAINT forum_posts_forum_id_fkey FOREIGN KEY (forum_id) REFERENCES public.forums(id),
   CONSTRAINT forum_posts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
@@ -242,6 +243,9 @@ CREATE TABLE public.profiles (
   verification_request text DEFAULT ''::text,
   last_seen timestamp with time zone,
   bio_link text DEFAULT ''::text,
+  badge_text text DEFAULT ''::text,
+  badge_tooltip text DEFAULT ''::text,
+  badge_url text DEFAULT ''::text,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );

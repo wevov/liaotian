@@ -48,19 +48,29 @@ export const Calls = () => {
   const callInProgressRef = useRef(callInProgress);
   const incomingCallRef = useRef(incomingCall);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
+  const callToneRef = useRef<HTMLAudioElement | null>(null);
 
   // Initialize Audio object once on mount
   useEffect(() => {
-    ringtoneRef.current = new Audio('https://mux8.com/assets/audio/theme01full.mp3'); // Make sure ringtone.mp3 is in /public
+    // Incoming Ringtone
+    ringtoneRef.current = new Audio('https://mux8.com/assets/audio/theme01full.mp3'); 
     ringtoneRef.current.loop = true;
+
+    // Outgoing CallTone
+    callToneRef.current = new Audio('https://mux8.com/assets/audio/theme02full.mp3');
+    callToneRef.current.loop = true;
+
     return () => {
       ringtoneRef.current?.pause();
       ringtoneRef.current = null;
+      callToneRef.current?.pause();
+      callToneRef.current = null;
     };
   }, []);
 
-  // Play/Pause based on incomingCall state
+  // Play/Pause based on call states
   useEffect(() => {
+    // 1. Handle Incoming Ringtone
     if (incomingCall) {
       ringtoneRef.current?.play().catch((err) => {
         console.warn('Ringtone autoplay blocked by browser:', err);
@@ -71,7 +81,22 @@ export const Calls = () => {
         ringtoneRef.current.currentTime = 0;
       }
     }
-  }, [incomingCall]);
+
+    // 2. Handle Outgoing CallTone
+    // Play only if we are the Caller and the Remote Stream hasn't started yet (still connecting)
+    const isCalling = callInProgress?.isCaller && !remoteStream;
+    
+    if (isCalling) {
+      callToneRef.current?.play().catch((err) => {
+        console.warn('CallTone autoplay blocked:', err);
+      });
+    } else {
+      if (callToneRef.current) {
+        callToneRef.current.pause();
+        callToneRef.current.currentTime = 0;
+      }
+    }
+  }, [incomingCall, callInProgress, remoteStream]);
 
   useEffect(() => {
     callInProgressRef.current = callInProgress;

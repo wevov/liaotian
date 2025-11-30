@@ -10,7 +10,7 @@ const goToProfile = async (profileId: string) => {
     .eq('id', profileId)
     .single();
   if (data) {
-    window.history.replaceState({}, '', `/?${data.username}`);
+    window.history.replaceState({}, '', `/?user=${data.username}`);
     window.dispatchEvent(new CustomEvent('navigateToProfile', { detail: profileId }));
   }
 };
