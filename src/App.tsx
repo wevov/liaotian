@@ -467,14 +467,7 @@ const handleMessageUser = (targetProfile: any) => {
   };
 
   return (
-	// Define Sidebar/Modal motion props (assuming LeftSidebar/RightSidebar/Notifications/Search
-  // components accept and apply these props to their outermost motion.div)
-  const overlayMotion = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-    transition: { duration: 0.3 }
-  };
+	
     <div className="min-h-screen bg-[rgb(var(--color-background))]">
       {/* 4a. RENDER SIDEBARS */}
 	<LeftSidebar 
