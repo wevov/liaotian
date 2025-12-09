@@ -1969,10 +1969,10 @@ export const Messages = ({
                  <ArrowLeft size={18} /> View Chats
              </motion.button>
           </motion.div>
-        )}
-      </div>
+        )
+      </motion.div>
 
-      <AnimatePresence>\
+      <AnimatePresence>
         {showSidebar && !selectedUser && (
           <motion.div 
             initial={{ opacity: 0 }}
