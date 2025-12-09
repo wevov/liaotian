@@ -1970,13 +1970,13 @@ export const Messages = ({
       </motion.div>
 
       <AnimatePresence>
-        {showSidebar && !selectedUser && (
-          <motion.div 
+        {(showSidebar && !selectedUser) && (
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            onClick={() => setShowSidebar(false)} 
+            onClick={() => setShowSidebar(false)}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-30 md:hidden"
           />
         )}
