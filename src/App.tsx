@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { supabase } from './lib/supabase';
 
 // Components from your live logic
-import Feed from './components/Feed_current';
+import Feed from './components/Feed';
 import Profile from './components/Profile';
 import Messages from './components/Messages';
 import { Auth } from './components/Auth';
