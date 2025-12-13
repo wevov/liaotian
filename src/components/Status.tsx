@@ -179,9 +179,9 @@ export const StatusTray: React.FC = () => {
     // 1. Upload Progress (Own User)
     if (targetUser.id === profile?.id && uploadProgress !== null && uploadProgress < 100) {
         return (
-            // FIX: Changed z-index from -z-10 to -z-1 to ensure visibility.
+            // FIX: Changed z-index from -z-1 to z-0 to ensure visibility.
             <div 
-                className="absolute rounded-full -z-1 inset-[-2px]" 
+                className="absolute rounded-full z-0 inset-[-2px]" 
                 style={{
                     background: `conic-gradient(rgb(var(--color-primary)) ${uploadProgress}%, rgb(var(--color-border)) ${uploadProgress}%)`
                 }}
@@ -191,8 +191,8 @@ export const StatusTray: React.FC = () => {
 
     // 2. No Status (Dashed Ring for Own User)
     if (statusCount === 0 && targetUser.id === profile?.id) {
-        // FIX: Changed z-index from -z-10 to -z-1 to ensure visibility.
-        return <div className="absolute rounded-full border-2 border-dashed border-[rgb(var(--color-border))] -z-1 inset-[-2px]"/>;
+        // FIX: Changed z-index from -z-1 to z-0 to ensure visibility.
+        return <div className="absolute rounded-full border-2 border-dashed border-[rgb(var(--color-border))] z-0 inset-[-2px]"/>;
     }
     
     // 3. Single Status (statusCount === 1) - Reverting to stable Tailwind classes
@@ -204,9 +204,9 @@ export const StatusTray: React.FC = () => {
         }
         
         return (
-            // FIX: Changed z-index from -z-10 to -z-1 to ensure visibility.
+            // FIX: Changed z-index from -z-1 to z-0 to ensure visibility.
             <div 
-                className={`absolute rounded-full -z-1 inset-[-2px] ${className}`} 
+                className={`absolute rounded-full z-0 inset-[-2px] ${className}`} 
             />
         );
     }
@@ -237,9 +237,9 @@ export const StatusTray: React.FC = () => {
     const gradientString = parts.join(', ');
 
     return (
-        // FIX: Changed z-index from -z-10 to -z-1 to ensure visibility.
+        // FIX: Changed z-index from -z-1 to z-0 to ensure visibility.
         <div 
-            className={`absolute rounded-full -z-1 inset-[-2px] ${targetUser.hasUnseen ? 'group-hover:scale-105 transition-transform' : ''}`}
+            className={`absolute rounded-full z-0 inset-[-2px] ${targetUser.hasUnseen ? 'group-hover:scale-105 transition-transform' : ''}`}
             style={{
                 background: `conic-gradient(${gradientString})`
             }}
@@ -258,14 +258,14 @@ export const StatusTray: React.FC = () => {
           <div className="relative w-16 h-16 rounded-full">
             <img 
               src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile?.username}`}
-              className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))]"
+              className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))] relative z-10"
               alt="Your avatar"
             />
             {renderRing(ownStatus)}
             
             <div 
               onClick={handleOwnPlusClick}
-              className="absolute -bottom-1 -right-1 w-6 h-6 bg-[rgb(var(--color-primary))] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform cursor-pointer border-2 border-[rgb(var(--color-surface))]"
+              className="absolute -bottom-1 -right-1 w-6 h-6 bg-[rgb(var(--color-primary))] rounded-full flex items-center justify-center group-hover:scale-110 transition-transform cursor-pointer border-2 border-[rgb(var(--color-surface))] z-20"
             >
               <Plus size={16} className="text-[rgb(var(--color-text-on-primary))]" />
             </div>
@@ -284,7 +284,7 @@ export const StatusTray: React.FC = () => {
             <div className="relative w-16 h-16 rounded-full">
               <img 
                 src={statusUser.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${statusUser.username}`}
-                className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))]"
+                className="w-full h-full rounded-full object-cover p-[2px] bg-[rgb(var(--color-surface))] relative z-10"
                 alt={statusUser.display_name}
               />
               {renderRing(statusUser)}
