@@ -192,40 +192,47 @@ export const StatusTray: React.FC = () => {
     if (statusCount === 0 && targetUser.id === profile?.id) {
         return <div className="absolute inset-0 rounded-full border-2 border-dashed border-[rgb(var(--color-border))] -z-10"/>;
     }
+    
+    // 3. Single Status (statusCount === 1) - Reverting to stable Tailwind classes
+    if (statusCount === 1) {
+        let className = 'bg-[rgb(var(--color-border))]'; // Default: seen/gray
+        if (targetUser.hasUnseen) {
+            // Unseen: Use the linear gradient class which works well for a single item
+            className = 'bg-gradient-to-tr from-[rgb(var(--color-accent))] to-[rgb(var(--color-primary))] group-hover:scale-105 transition-transform';
+        }
+        
+        return (
+            <div 
+                className={`absolute inset-0 rounded-full p-[2px] -z-10 ${className}`} 
+            />
+        );
+    }
 
-    // 3. Segmented Ring Logic
-    // Seen color: gray/border. Unseen color: Gradient (simulated via CSS vars or fixed colors)
+
+    // 4. Multiple Statuses (statusCount > 1) - Conic Gradient Segmented Ring (for segmented look)
+    // Seen color: gray/border. Unseen color: Primary/Accent
     const unseenColor = `rgb(var(--color-primary))`; 
     const seenColor = `rgb(var(--color-border))`;
     const gapDegrees = 3;
     
-    let gradientString = '';
+    const segmentSize = 360 / statusCount;
+    const parts = [];
+    
+    for (let i = 0; i < statusCount; i++) {
+        // Determine if this specific story is unseen
+        const isUnseen = !targetUser.statuses[i].viewed_by.includes(user.id);
+        const color = isUnseen ? unseenColor : seenColor;
 
-    if (statusCount === 1) {
-        // Single segment (Full circle)
-        const color = targetUser.hasUnseen ? unseenColor : seenColor;
-        gradientString = `${color} 0deg 360deg`;
-    } else {
-        // Multiple segments
-        const segmentSize = 360 / statusCount;
-        const parts = [];
+        const start = i * segmentSize + gapDegrees / 2;
+        const end = (i + 1) * segmentSize - gapDegrees / 2;
         
-        for (let i = 0; i < statusCount; i++) {
-            // Determine if this specific story is unseen
-            // Note: In the simplified list, we check generally. 
-            // For precise per-segment coloring, we'd check status[i].viewed_by.
-            // Here we use the user's aggregate status for visual simplicity 
-            // OR check individual status if data is available.
-            const isUnseen = !targetUser.statuses[i].viewed_by.includes(user.id);
-            const color = isUnseen ? unseenColor : seenColor;
-
-            const start = i * segmentSize + gapDegrees / 2;
-            const end = (i + 1) * segmentSize - gapDegrees / 2;
-            
+        // Push color stops for the segment
+        if (start < end) {
             parts.push(`${color} ${start}deg ${end}deg`);
         }
-        gradientString = parts.join(', ');
     }
+    
+    const gradientString = parts.join(', ');
 
     return (
         <div 
@@ -236,7 +243,6 @@ export const StatusTray: React.FC = () => {
         />
     );
   };
-
   return (
     <div className="flex space-x-4 p-4 overflow-x-auto scrollbar-hide bg-[rgb(var(--color-surface))] border-b border-[rgb(var(--color-border))]">
       {/* Own Circle */}
