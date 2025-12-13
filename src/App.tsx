@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation, Link, useNavigate } from 'react-router-dom';
+// src/App.tsx
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Home, User, MessageSquare, Bell, Menu, Search, Plus, LogOut } from 'lucide-react';
+import { Home, User, MessageSquare, LogOut, Plus } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { supabase } from './lib/supabase';
-
-// Components from your live logic
-import Feed from './components/Feed';
-import Profile from './components/Profile';
-import Messages from './components/Messages';
+import { Feed } from './components/Feed';
+import { Profile } from './components/Profile'; // Ensure this file exists and exports 'Profile'
+import { Messages } from './components/Messages';
 import { Auth } from './components/Auth';
 
 const NAV_ITEMS = [
@@ -17,6 +15,7 @@ const NAV_ITEMS = [
   { icon: User, label: 'Profile', path: '/profile' },
 ];
 
+// Special event constants as requested
 export const SPECIAL_EVENT_MODE = false;
 export const EVENT_MESSAGE = "⚡ SPECIAL EVENT (test): WELCOME TO THE LIAOVERSE! ENJOY THE VIBES! ⚡";
 const EVENT_THEMES = ["https://huanmux.github.io/assets/audio/theme01.mp3", "https://huanmux.github.io/assets/audio/theme02.mp3"];
@@ -75,7 +74,7 @@ const DesktopNavRail = () => {
       
       <div className="mt-auto mb-4">
          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[rgb(var(--color-primary))] to-[rgb(var(--color-accent))] p-0.5 cursor-pointer">
-            <img src={profile?.avatar_url || "https://i.pravatar.cc/150"} alt="User" className="w-full h-full rounded-full object-cover border-2 border-[rgb(var(--color-background))]" />
+            <img src={profile?.avatar_url || "https://api.dicebear.com/7.x/avataaars/svg?seed=default"} alt="User" className="w-full h-full rounded-full object-cover border-2 border-[rgb(var(--color-background))]" />
          </div>
       </div>
     </motion.div>
@@ -84,17 +83,18 @@ const DesktopNavRail = () => {
 
 const MainContent = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   
   if (loading) return <div className="min-h-screen flex items-center justify-center bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))]">Loading Gazebo...</div>;
   if (!user) return <Auth />;
 
   return (
-    <div className="min-h-screen bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))] font-sans selection:bg-[rgba(var(--color-primary),0.3)]">
+    <div className="min-h-screen bg-[rgb(var(--color-background))] text-[rgb(var(--color-text))] font-sans">
       <DesktopNavRail />
       <main className="md:pl-24 pb-20 md:pb-0 min-h-screen relative overflow-hidden">
         <div className="max-w-4xl mx-auto min-h-screen border-x border-[rgba(var(--color-border),0.3)] bg-[rgba(var(--color-background),0.5)] shadow-2xl">
           <AnimatePresence mode="wait">
-            <Routes>
+            <Routes location={location} key={location.pathname}>
               <Route path="/" element={<Feed />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/messages" element={<Messages />} />
