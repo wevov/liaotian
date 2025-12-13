@@ -179,9 +179,9 @@ export const StatusTray: React.FC = () => {
     // 1. Upload Progress (Own User)
     if (targetUser.id === profile?.id && uploadProgress !== null && uploadProgress < 100) {
         return (
-            // FIX: Use inset-[-2px] for proper ring visibility, remove p-[2px]
+            // FIX: Changed z-index from -z-10 to z-20 to ensure visibility.
             <div 
-                className="absolute rounded-full -z-10 inset-[-2px]" 
+                className="absolute rounded-full z-20 inset-[-2px]" 
                 style={{
                     background: `conic-gradient(rgb(var(--color-primary)) ${uploadProgress}%, rgb(var(--color-border)) ${uploadProgress}%)`
                 }}
@@ -191,22 +191,22 @@ export const StatusTray: React.FC = () => {
 
     // 2. No Status (Dashed Ring for Own User)
     if (statusCount === 0 && targetUser.id === profile?.id) {
-        // FIX: Use inset-[-2px] for proper ring visibility
-        return <div className="absolute rounded-full border-2 border-dashed border-[rgb(var(--color-border))] -z-10 inset-[-2px]"/>;
+        // FIX: Changed z-index from -z-10 to z-20 to ensure visibility.
+        return <div className="absolute rounded-full border-2 border-dashed border-[rgb(var(--color-border))] z-20 inset-[-2px]"/>;
     }
     
     // 3. Single Status (statusCount === 1) - Reverting to stable Tailwind classes
     if (statusCount === 1) {
-        let className = 'bg-[rgb(var(--color-text-secondary))]'; // Default: seen
+        let className = 'bg-[rgb(var(--color-border))]'; // Default: seen/gray
         if (targetUser.hasUnseen) {
             // Unseen: Use the linear gradient class which works well for a single item
             className = 'bg-gradient-to-tr from-[rgb(var(--color-accent))] to-[rgb(var(--color-primary))] group-hover:scale-105 transition-transform';
         }
         
         return (
-            // FIX: Use inset-[-2px] for proper ring visibility, remove p-[2px]
+            // FIX: Changed z-index from -z-10 to z-20 to ensure visibility.
             <div 
-                className={`absolute rounded-full -z-10 inset-[-2px] ${className}`} 
+                className={`absolute rounded-full z-20 inset-[-2px] ${className}`} 
             />
         );
     }
@@ -215,7 +215,7 @@ export const StatusTray: React.FC = () => {
     // 4. Multiple Statuses (statusCount > 1) - Conic Gradient Segmented Ring (for segmented look)
     // Seen color: gray/border. Unseen color: Primary/Accent
     const unseenColor = `rgb(var(--color-primary))`; 
-    const seenColor = `rgb(var(--color-text-secondary))`;
+    const seenColor = `rgb(var(--color-border))`;
     const gapDegrees = 3;
     
     const segmentSize = 360 / statusCount;
@@ -237,9 +237,9 @@ export const StatusTray: React.FC = () => {
     const gradientString = parts.join(', ');
 
     return (
-        // FIX: Use inset-[-2px] for proper ring visibility, remove p-[2px]
+        // FIX: Changed z-index from -z-10 to z-20 to ensure visibility.
         <div 
-            className={`absolute rounded-full -z-10 inset-[-2px] ${targetUser.hasUnseen ? 'group-hover:scale-105 transition-transform' : ''}`}
+            className={`absolute rounded-full z-20 inset-[-2px] ${targetUser.hasUnseen ? 'group-hover:scale-105 transition-transform' : ''}`}
             style={{
                 background: `conic-gradient(${gradientString})`
             }}
