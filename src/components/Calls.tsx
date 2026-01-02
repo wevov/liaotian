@@ -240,7 +240,21 @@ export const Calls = () => {
     if (!user) return;
     if (peerRef.current) return; // Prevent double init
 
-    const peer = new Peer(user.id);
+    const peer = new Peer(user.id, {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          {
+            urls: 'turn:your-turn-server-url:3478',
+            username: 'your-username',
+            credential: 'your-password'
+          }
+        ]
+      },
+      debug: 2
+    });
+
     peerRef.current = peer;
 
     peer.on('open', (id) => {
@@ -349,7 +363,7 @@ export const Calls = () => {
             <div className="text-center text-[rgb(var(--color-text))]">
                 <h3 className="text-xl font-bold mb-2">
                     {callInProgress.isCaller && !remoteStream ? 'Ringing...' : ''} 
-                    {!callInProgress.isCaller || remoteStream ? `In call with ${callInProgress.with.display_name}` : ''}
+                    {!callInProgress.isCaller || remoteStream ? `In call with ${callInProgress.with.display_name}` : ''} 
                     {callInProgress.isCaller && !remoteStream && <span className="block text-sm font-normal text-[rgb(var(--color-text-secondary))]">Waiting for answer...</span>}
                 </h3>
                 
